@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}CSV一括登録{% endblock %}
+{% block content %}
+<h1>CSV一括登録</h1>
+<div class="grid2">
+<form method="post" action="/import" enctype="multipart/form-data" class="card">
+  <h2>ファイルを選択</h2>
+  <label>CSVファイル（UTF-8 / Shift_JIS）<input type="file" name="file" accept=".csv,text/csv" required></label>
+  <fieldset>
+    <legend>既に存在するユーザ（action が空欄 / add の行）</legend>
+    <label class="check"><input type="radio" name="on_exists" value="skip" {{ 'checked' if not opts or opts.on_exists == 'skip' }}> スキップする</label>
+    <label class="check"><input type="radio" name="on_exists" value="update" {{ 'checked' if opts and opts.on_exists == 'update' }}> 更新する（空欄の項目は変更しない）</label>
+  </fieldset>
+  <label class="check"><input type="checkbox" name="create_groups" value="1" {{ 'checked' if opts and opts.create_groups }}> 存在しないグループを自動作成する</label>
+  <div class="buttons">
+    <button name="dry_run" value="1">確認のみ（登録しない）</button>
+    <button class="primary" name="dry_run" value="0">登録を実行</button>
+  </div>
+</form>
+<div class="card">
+  <h2>CSVの形式</h2>
+  <p><a class="button" href="/import/template.csv">テンプレートをダウンロード</a> <a class="button" href="/export/users.csv">現在のユーザを書き出し</a></p>
+  <table class="list small">
+    <tr><th>username</th><td>ログイン用ユーザ名（必須）</td></tr>
+    <tr><th>last_name / first_name</th><td>姓 / 名</td></tr>
+    <tr><th>password</th><td>新規作成時は必須。更新時は空欄で変更なし</td></tr>
+    <tr><th>groups</th><td>所属グループ。複数は <code>;</code> 区切り（更新時は指定した内容に置き換え）</td></tr>
+    <tr><th>mail</th><td>メールアドレス</td></tr>
+    <tr><th>vlan</th><td>ユーザ個別のVLAN ID（空欄 = グループに従う）</td></tr>
+    <tr><th>action</th><td><code>add</code>（既定）/ <code>update</code> / <code>delete</code></td></tr>
+  </table>
+  <p class="small muted">見出しは日本語（ユーザ名・姓・名・パスワード・グループ・メール）でも認識します。</p>
+</div>
+</div>
+
+{% if results is not none %}
+<div class="card">
+  <h2>{{ '確認結果（まだ登録していません）' if dry_run else '登録結果' }}</h2>
+  <p>{% for k, n in summary.items() %}<span class="tag {{ 'bad' if k == 'エラー' }}">{{ k }} {{ n }}</span>{% endfor %}</p>
+  <table class="list">
+    <thead><tr><th>行</th><th>ユーザ</th><th>結果</th><th>メッセージ</th></tr></thead>
+    <tbody>
+    {% for r in results %}
+    <tr class="{{ 'bad' if r.result == 'エラー' }}"><td>{{ r.line }}</td><td>{{ r.user }}</td><td>{{ r.result }}</td><td class="small">{{ r.message }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if dry_run %}<p class="muted small">問題がなければ、同じファイルを選び直して「登録を実行」してください。</p>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

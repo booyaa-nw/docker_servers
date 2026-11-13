@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ '編集: ' ~ group.cn if group else 'グループ追加' }}{% endblock %}
+{% block content %}
+<p><a href="/groups">← グループ一覧</a></p>
+<h1>{{ 'グループ編集: ' ~ group.cn if group else 'グループ追加' }}</h1>
+<div class="grid2">
+<form method="post" action="{{ '/groups/' ~ (group.cn|urlencode) if group else '/groups/new' }}" class="card">
+  <h2>基本情報</h2>
+  <label>グループ名 <span class="req">必須</span>
+    <input name="cn" value="{{ group.cn if group }}" required pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,63}" title="英数字と . _ -（先頭は英数字）">
+  </label>
+  <label>説明<input name="description" value="{{ group.description if group }}"></label>
+  <div class="row2">
+    <label>VLAN ID<input name="vlan" type="number" min="1" max="4094" value="{{ group.vlan if group }}" placeholder="空欄 = VLANを割り当てない"></label>
+    <label>優先度（小さいほど優先）<input name="priority" type="number" value="{{ group.priority if group else 100 }}"></label>
+  </div>
+  <fieldset>
+    <legend>メンバー <input type="search" placeholder="絞り込み" data-filter="#members label" class="inline"></legend>
+    <div id="members" class="checks">
+    {% for u in users %}
+    <label class="check"><input type="checkbox" name="members" value="{{ u.uid }}" {{ 'checked' if group and u.uid in group.members }}>
+      {{ u.uid }} <span class="muted small">{{ u.sn if u.sn != u.uid }} {{ u.given }}</span></label>
+    {% else %}<p class="muted">ユーザがいません</p>{% endfor %}
+    </div>
+  </fieldset>
+  <button class="primary">{{ '保存' if group else '作成' }}</button>
+</form>
+{% if group %}
+<div>
+  <form method="post" action="/groups/{{ group.cn|urlencode }}/delete" class="card danger" data-confirm="グループ「{{ group.cn }}」を削除します。よろしいですか？">
+    <h2>削除</h2>
+    <p class="small muted">所属ユーザ自体は削除されません。</p>
+    <button class="danger">グループを削除</button>
+  </form>
+  <div class="card small muted">DN: {{ group.dn }}<br>gidNumber: {{ group.gid }}</div>
+</div>
+{% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,21 @@
+# Dynamic VLAN 呼び出し口（イメージに固定）。中身の nwlab_vlan は Web UI が自動生成します。
+
+# 外側(default)の post-auth: EAP以外（PAP / MS-CHAP 直）のときだけ評価
+nwlab_vlan_outer {
+	if (!&EAP-Message) {
+		nwlab_vlan
+	}
+}
+
+# inner-tunnel の post-auth: PEAP/TTLS の内側で評価し、外側の応答へ引き渡す
+# （default の post-auth にある "&reply: += &session-state:" で Access-Accept に載る）
+nwlab_vlan_inner {
+	nwlab_vlan
+	if (&reply:Tunnel-Private-Group-Id) {
+		update outer.session-state {
+			&Tunnel-Type := &reply:Tunnel-Type
+			&Tunnel-Medium-Type := &reply:Tunnel-Medium-Type
+			&Tunnel-Private-Group-Id := &reply:Tunnel-Private-Group-Id
+		}
+	}
+}

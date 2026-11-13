@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}管理設定{% endblock %}
+{% block content %}
+<h1>管理設定</h1>
+
+<div class="card">
+  <h2>反映状況</h2>
+  <table class="list small">
+    <tr><th>ベースDN</th><td><code>{{ cfg.base_dn }}</code></td></tr>
+    <tr><th>管理者DN</th><td><code>{{ cfg.admin_rdn }},{{ cfg.base_dn }}</code></td></tr>
+    <tr><th>FreeRADIUS 検索用DN</th><td><code>{{ cfg.bind_rdn }},{{ cfg.base_dn }}</code></td></tr>
+    <tr><th>LDAP</th><td>{{ state.ldap.message or '-' }} <span class="muted">{{ state.ldap.time }}</span></td></tr>
+    <tr><th>RADIUS</th><td>{{ state.radius.message or '-' }} <span class="muted">{{ state.radius.time }}</span></td></tr>
+  </table>
+</div>
+
+<div class="grid2">
+<form method="post" action="/settings/domain" class="card" data-confirm="ドメインを変更します。LDAPとRADIUSが数秒〜十数秒停止します。よろしいですか？">
+  <h2>ドメインの変更</h2>
+  <p class="small muted">全エントリのDNを新しいドメインに置き換えて入れ替えます。変更前のデータは共有フォルダの backup/ に保存されます。
+  NW機器側のLDAP設定（ベースDN・バインドDN）の変更も必要です。</p>
+  <label>現在のドメイン<input value="{{ domain }}" disabled></label>
+  <label>新しいドメイン<input name="domain" placeholder="example.local" required pattern="[A-Za-z0-9.\-]+"></label>
+  <label class="check"><input type="checkbox" name="rewrite_mail" value="1" checked> メールアドレスの @{{ domain }} も置き換える</label>
+  <label class="check"><input type="checkbox" name="confirm" value="1" required> 実行中は認証が一時的に止まることを理解しました</label>
+  <button class="danger">ドメインを変更</button>
+</form>
+
+<form method="post" action="/settings/admin" class="card">
+  <h2>admin管理者</h2>
+  <p class="small muted">LDAPの管理者（rootdn）とこの画面のログインに使います。</p>
+  <label>管理者名<input name="name" value="{{ admin_name }}" required></label>
+  <label>現在のパスワード<input name="current_password" type="password" required autocomplete="current-password"></label>
+  <div class="row2">
+    <label>新しいパスワード（8文字以上）<input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
+    <label>新しいパスワード（確認）<input name="password2" type="password" required autocomplete="new-password"></label>
+  </div>
+  <button class="primary">変更</button>
+</form>
+</div>
+
+<div class="card">
+  <h2>検索用アカウント（ou=ServiceAccounts）</h2>
+  <p class="small muted">FreeRADIUS や FortiGate などのNW機器がLDAPを検索するときに使うアカウントです。★ が FreeRADIUS で使用中のアカウントです。</p>
+  <table class="list">
+    <thead><tr><th>アカウント</th><th>説明</th><th>パスワード変更</th><th>FreeRADIUSで使用</th><th></th></tr></thead>
+    <tbody>
+    {% for a in accounts %}
+    <tr>
+      <td>{{ '★ ' if a.radius }}<strong>{{ a.cn }}</strong><br><code class="small">{{ a.dn }}</code></td>
+      <td class="small">{{ a.description }}</td>
+      <td>
+        <form method="post" action="/settings/accounts/{{ a.cn|urlencode }}/password" class="inline-form">
+          <input name="password" type="password" placeholder="新しいパスワード" required autocomplete="new-password">
+          <input name="password2" type="password" placeholder="確認" required autocomplete="new-password">
+          <button class="small">変更</button>
+        </form>
+      </td>
+      <td>
+        {% if a.radius %}<span class="tag">使用中</span>{% else %}
+        <form method="post" action="/settings/accounts/{{ a.cn|urlencode }}/radius" class="inline-form" data-confirm="FreeRADIUS の検索用アカウントを「{{ a.cn }}」に切り替えます。よろしいですか？">
+          <input name="password" type="password" placeholder="このアカウントのパスワード" required>
+          <button class="small">切り替え</button>
+        </form>{% endif %}
+      </td>
+      <td class="right">{% if not a.radius %}
+        <form method="post" action="/settings/accounts/{{ a.cn|urlencode }}/delete" data-confirm="「{{ a.cn }}」を削除します。連携中の機器は認証できなくなります。よろしいですか？">
+          <button class="small danger">削除</button>
+        </form>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/settings/accounts/new" class="inline-form add">
+    <input name="cn" placeholder="アカウント名（例: manager）" required pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,63}">
+    <input name="description" placeholder="説明（例: FortiGate LDAP連携用）">
+    <input name="password" type="password" placeholder="パスワード" required autocomplete="new-password">
+    <input name="password2" type="password" placeholder="確認" required autocomplete="new-password">
+    <button class="primary small">＋ 追加</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}ユーザ{% endblock %}
+{% block content %}
+<div class="head">
+  <h1>ユーザ <span class="count">{{ users|length }}</span></h1>
+  <div class="actions">
+    <input type="search" placeholder="絞り込み" data-filter="#users tbody tr">
+    <a class="button" href="/export/users.csv">CSV書き出し</a>
+    <a class="button primary" href="/users/new">＋ ユーザ追加</a>
+  </div>
+</div>
+<table id="users" class="list">
+  <thead><tr><th>ユーザ名</th><th>氏名</th><th>グループ</th><th>VLAN</th><th>メール</th><th></th></tr></thead>
+  <tbody>
+  {% for u in users %}
+  <tr>
+    <td><a href="/users/{{ u.uid|urlencode }}"><strong>{{ u.uid }}</strong></a></td>
+    <td>{{ u.sn if u.sn != u.uid else '' }} {{ u.given }}</td>
+    <td>{% for g in u.groups %}<span class="tag">{{ g }}</span>{% endfor %}</td>
+    <td>{% if u.eff_vlan %}<span class="vlan">{{ u.eff_vlan }}</span> <span class="muted small">{{ u.eff_reason }}</span>{% else %}<span class="muted small">なし</span>{% endif %}</td>
+    <td class="small">{{ u.mail }}</td>
+    <td class="right"><a class="button small" href="/users/{{ u.uid|urlencode }}">編集</a></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="empty">ユーザがいません</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

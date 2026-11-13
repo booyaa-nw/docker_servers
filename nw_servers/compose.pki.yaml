@@ -1,0 +1,32 @@
+# Standalone CLI tools: docker compose -f compose.pki.yaml run --rm pki ...
+x-pki: &pki
+  build: ./pki
+  image: nw-cfssl-cli:1.7.0
+  working_dir: /data
+  user: "${PKI_UID:-1000}:${PKI_GID:-1000}"
+  network_mode: none
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs:
+    - /tmp:mode=1777
+
+services:
+  pki:
+    <<: *pki
+    volumes:
+      - ./pki/data:/data
+      - ./pki/import:/input:ro
+  pki-root:
+    <<: *pki
+    volumes:
+      - ./pki/data:/data
+      - ./pki/import:/input:ro
+      - ./pki/offline:/offline
+      - ./pki/secrets/root.pass:/run/secrets/root.pass:ro
+  pki-deploy:
+    <<: *pki
+    volumes:
+      - ./pki/data:/data
+      - ./pki/import:/input:ro
+      - ./ldap/certs:/deploy-ldap

@@ -1,0 +1,34 @@
+include         ${SCHEMA_DIR}/core.schema
+include         ${SCHEMA_DIR}/cosine.schema
+include         ${SCHEMA_DIR}/inetorgperson.schema
+include         ${SCHEMA_DIR}/nis.schema
+include         ${SCHEMA_DIR}/nwlab.schema
+
+modulepath      ${MODULE_DIR}
+moduleload      back_mdb.so
+
+pidfile         ${RUN_DIR}/slapd.pid
+argsfile        ${RUN_DIR}/slapd.args
+
+database        mdb
+maxsize         1073741824
+suffix          "${LDAP_BASE_DN}"
+rootdn          "${LDAP_ADMIN_DN}"
+rootpw          ${LDAP_ADMIN_PASSWORD_HASH}
+directory       ${DATA_DIR}
+
+index           objectClass             eq
+index           uid,cn                  eq,sub
+index           memberUid               eq
+index           uidNumber,gidNumber     eq
+
+# userPassword: RADIUS検索用アカウントのみ読み取り可（MS-CHAPv2でNTハッシュを計算するため）
+access to attrs=userPassword
+        by dn.exact="${LDAP_BIND_DN}" read
+        by self write
+        by anonymous auth
+        by * none
+
+access to *
+        by users read
+        by * none

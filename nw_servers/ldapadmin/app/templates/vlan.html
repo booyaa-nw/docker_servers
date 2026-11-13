@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Dynamic VLAN{% endblock %}
+{% block content %}
+<h1>Dynamic VLAN</h1>
+<p class="muted">認証成功時に Tunnel-Type=VLAN / Tunnel-Medium-Type=IEEE-802 / Tunnel-Private-Group-Id を返します。
+評価順: <strong>① ユーザ個別のVLAN</strong> → <strong>② VLAN付きグループ（優先度の小さい順）</strong> → ③ どれにも該当しなければVLAN属性なしで許可。PEAP / EAP-TTLS の内側認証でも同じルールが適用されます。</p>
+
+<form method="post" action="/vlan" class="card">
+  <h2>グループのVLANと優先度</h2>
+  <table class="list">
+    <thead><tr><th>グループ</th><th>VLAN ID（空欄=なし）</th><th>優先度</th><th>メンバー数</th></tr></thead>
+    <tbody>
+    {% for g in groups %}
+    <tr>
+      <td><a href="/groups/{{ g.cn|urlencode }}">{{ g.cn }}</a> <span class="muted small">{{ g.description }}</span></td>
+      <td><input name="vlan__{{ g.cn }}" type="number" min="1" max="4094" value="{{ g.vlan }}" class="narrow"></td>
+      <td><input name="prio__{{ g.cn }}" type="number" value="{{ g.priority }}" class="narrow"></td>
+      <td>{{ g.members|length }}</td>
+    </tr>
+    {% else %}<tr><td colspan="4" class="empty">グループがありません</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  <button class="primary">保存して RADIUS に反映</button>
+</form>
+
+<div class="card">
+  <div class="head"><h2>ユーザごとの実効VLAN</h2><input type="search" placeholder="絞り込み" data-filter="#eff tbody tr"></div>
+  <table class="list" id="eff">
+    <thead><tr><th>ユーザ</th><th>VLAN</th><th>決定理由</th><th>所属グループ</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+    <tr>
+      <td><a href="/users/{{ u.uid|urlencode }}">{{ u.uid }}</a></td>
+      <td>{% if u.eff_vlan %}<span class="vlan">{{ u.eff_vlan }}</span>{% else %}<span class="muted small">なし</span>{% endif %}</td>
+      <td class="small">{{ u.eff_reason or 'VLAN属性なしで許可' }}</td>
+      <td>{% for g in u.groups %}<span class="tag">{{ g }}</span>{% endfor %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<details class="card">
+  <summary>生成される FreeRADIUS ポリシー（参考）</summary>
+  <pre>{{ policy }}</pre>
+  <form method="post" action="/vlan/resync"><button>FreeRADIUS へ再反映</button></form>
+</details>
+{% endblock %}

@@ -1,0 +1,78 @@
+dn: ${LDAP_BASE_DN}
+objectClass: top
+objectClass: dcObject
+objectClass: organization
+o: ${LDAP_DOMAIN}
+dc: ${LDAP_DC}
+
+dn: ou=Users,${LDAP_BASE_DN}
+objectClass: organizationalUnit
+ou: Users
+
+dn: ou=Groups,${LDAP_BASE_DN}
+objectClass: organizationalUnit
+ou: Groups
+
+dn: ou=ServiceAccounts,${LDAP_BASE_DN}
+objectClass: organizationalUnit
+ou: ServiceAccounts
+
+# FreeRADIUS がbindに使う検索用アカウント
+dn: ${LDAP_BIND_DN}
+objectClass: organizationalRole
+objectClass: simpleSecurityObject
+cn: radius
+description: FreeRADIUS bind account
+userPassword: ${LDAP_BIND_PASSWORD}
+
+# グループ（posixGroup / GID: 20001-29999）  VLANは優先度の小さい順に評価
+dn: cn=NW-Staff,ou=Groups,${LDAP_BASE_DN}
+objectClass: posixGroup
+objectClass: nwRadiusGroup
+cn: NW-Staff
+gidNumber: 20010
+description: Staff
+nwVlanId: 10
+nwVlanPriority: 10
+memberUid: taro.yamada
+
+dn: cn=NW-Guest,ou=Groups,${LDAP_BASE_DN}
+objectClass: posixGroup
+objectClass: nwRadiusGroup
+cn: NW-Guest
+gidNumber: 20099
+description: Guest
+nwVlanId: 99
+nwVlanPriority: 90
+memberUid: guest01
+
+# テストユーザー（UID: 10000-19999）  ラボ用: MS-CHAPv2のためuserPasswordは平文
+dn: uid=taro.yamada,ou=Users,${LDAP_BASE_DN}
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: nwRadiusUser
+uid: taro.yamada
+cn: Yamada Taro
+sn: Yamada
+givenName: Taro
+displayName: Yamada Taro
+mail: taro.yamada@${LDAP_DOMAIN}
+uidNumber: 10001
+gidNumber: 20010
+homeDirectory: /home/taro.yamada
+loginShell: /bin/bash
+userPassword: ${LDAP_USER1_PASSWORD}
+
+dn: uid=guest01,ou=Users,${LDAP_BASE_DN}
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: nwRadiusUser
+uid: guest01
+cn: guest01
+sn: guest01
+displayName: Guest 01
+uidNumber: 10002
+gidNumber: 20099
+homeDirectory: /home/guest01
+loginShell: /bin/bash
+userPassword: ${LDAP_USER2_PASSWORD}

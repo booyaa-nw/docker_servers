@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}ログイン{% endblock %}
+{% block content %}
+<div class="login">
+  <h1>LDAPユーザ管理</h1>
+  <p class="muted">{{ domain }}（{{ base_dn }}）</p>
+  <form method="post" action="/login" class="card">
+    <label>管理者名<input name="username" value="{{ admin_name }}" autocomplete="username" required></label>
+    <label>パスワード<input name="password" type="password" autocomplete="current-password" autofocus required></label>
+    <button class="primary">ログイン</button>
+  </form>
+</div>
+{% endblock %}

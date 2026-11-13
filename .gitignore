@@ -1,0 +1,9 @@
+.env
+freeradius/certs/
+ldap/certs/
+.env.ldap
+pki/data/
+pki/offline/
+pki/secrets/
+pki/import/
+pki/.build/

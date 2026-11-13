@@ -1,0 +1,69 @@
+# rlm_ldap: ユーザー・グループを nw-openldap から参照
+# このテンプレートは起動時に共有設定(settings.json)の値で展開されます
+ldap {
+	server = '${LDAP_SERVER}'
+	port = 389
+
+	identity = '${LDAP_BIND_DN}'
+	password = $ENV{LDAP_BIND_PW}
+
+	base_dn = '${LDAP_BASE_DN}'
+
+	sasl {
+	}
+
+	update {
+		# userPassword(平文) → PAP / MS-CHAPv2 / PEAP で照合
+		control:Password-With-Header	+= 'userPassword'
+		# ユーザー個別のVLAN（Dynamic VLANポリシーで使用）
+		control:Tmp-String-0		:= 'nwVlanId'
+	}
+
+	user_dn = "LDAP-UserDn"
+
+	user {
+		base_dn = "ou=Users,${..base_dn}"
+		filter = "(uid=%{%{Stripped-User-Name}:-%{User-Name}})"
+		scope = 'sub'
+		sasl {
+		}
+	}
+
+	# posixGroup の memberUid でグループ判定（LDAP-Group == 'NW-Staff'）
+	group {
+		base_dn = "ou=Groups,${..base_dn}"
+		filter = '(objectClass=posixGroup)'
+		scope = 'sub'
+		name_attribute = cn
+		membership_filter = "(memberUid=%{%{Stripped-User-Name}:-%{User-Name}})"
+		cacheable_name = 'yes'
+		cacheable_dn = 'no'
+	}
+
+	options {
+		chase_referrals = no
+		rebind = no
+		res_timeout = 10
+		srv_timelimit = 3
+		net_timeout = 1
+		idle = 60
+		probes = 3
+		interval = 3
+		ldap_debug = 0x0000
+	}
+
+	tls {
+	}
+
+	# start = 0: LDAPより先にRADIUSが起動しても落ちないようにする
+	pool {
+		start = 0
+		min = 1
+		max = ${thread[pool].max_servers}
+		spare = 2
+		uses = 0
+		retry_delay = 30
+		lifetime = 0
+		idle_timeout = 60
+	}
+}
