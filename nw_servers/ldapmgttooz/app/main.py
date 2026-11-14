@@ -1,8 +1,10 @@
-"""nw-ldapadmin: NW機器 RADIUS 認証用 LDAP 管理 Web UI"""
+"""LdapMgtTooz: NW機器 RADIUS 認証用 LDAP 管理 Web UI"""
+import asyncio
 import hmac
+import secrets
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -13,11 +15,23 @@ from . import config, csvio, domain, radiuspolicy
 from .directory import Directory, DirectoryError, check_name
 
 HERE = Path(__file__).parent
-app = FastAPI(title="nw-ldapadmin", docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(title="LdapMgtTooz", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(SessionMiddleware, secret_key=config.session_secret(), same_site="strict",
-                   max_age=8 * 3600, session_cookie="nwldapadmin")
+                   max_age=8 * 3600, session_cookie="nwldapmgttooz")
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=HERE / "templates")
+
+
+# Serialize UI operations across domain changes, including in-flight LDAP writes.
+requests_lock = asyncio.Lock()
+
+
+@app.middleware("http")
+async def serialize_ui(request, call_next):
+    if request.url.path.startswith("/static/"):
+        return await call_next(request)
+    async with requests_lock:
+        return await call_next(request)
 
 
 class LoginRequired(Exception):
@@ -31,7 +45,7 @@ async def _login_required(request: Request, exc):
 
 @app.exception_handler(config.SettingsMissing)
 async def _settings_missing(request: Request, exc):
-    return HTMLResponse(f"<h1>nw-ldapadmin</h1><p>{exc}</p>", status_code=503)
+    return HTMLResponse(f"<h1>LdapMgtTooz</h1><p>{exc}</p>", status_code=503)
 
 
 # ------------------------------------------------------------------ helpers
@@ -52,6 +66,8 @@ def page(request: Request, name: str, **ctx):
     cfg = config.read_json(config.SETTINGS) or {}
     ctx.update(
         flashes=request.session.pop("flash", []),
+        generation=cfg.get("generation", ""),
+        csrf=request.session.setdefault("csrf", secrets.token_urlsafe(32)),
         state=config.apply_state(),
         base_dn=cfg.get("base_dn", ""),
         domain=config.base_to_domain(cfg.get("base_dn", "")),
@@ -69,13 +85,26 @@ def soft_error(request: Request, e: Exception):
 
 def sync_policy(d: Directory | None = None):
     try:
-        radiuspolicy.sync((d or Directory()).list_groups())
+        d = d or Directory()
+        radiuspolicy.sync(d.list_groups(), d.cfg)
     except DirectoryError:
         pass
 
 
 async def form(request: Request):
     f = await request.form()
+    token = f.get("_csrf")
+    if not isinstance(token, str) or not request.session.get("csrf") or not hmac.compare_digest(token, request.session["csrf"]):
+        raise HTTPException(403, "フォームを開き直してください")
+    path = request.url.path
+    if path not in ("/login", "/logout"):
+        cfg = config.load_settings()
+        if f.get("_generation") != str(cfg["generation"]):
+            raise HTTPException(409, "ドメインまたは設定が変わりました。画面を開き直してください")
+        if not path.startswith("/domains/"):
+            ldap = config.read_json(config.STATUS_LDAP) or {}
+            if not ldap.get("ok") or ldap.get("applied_generation") != cfg["generation"]:
+                raise HTTPException(409, "LDAPの反映完了後に画面を開き直してください")
     return f, (lambda k, default="": (f.get(k) or default).strip() if isinstance(f.get(k), str) else default)
 
 
@@ -109,12 +138,14 @@ async def login_post(request: Request):
     if not ok:
         flash(request, "ユーザー名またはパスワードが違います", "error")
         return back("/login")
+    request.session.clear()
     request.session["auth"] = True
     return back("/users")
 
 
 @app.post("/logout")
-def logout(request: Request):
+async def logout(request: Request):
+    await form(request)
     request.session.clear()
     return back("/login")
 
@@ -212,8 +243,9 @@ async def user_password(request: Request, uid: str):
 
 
 @app.post("/users/{uid}/delete")
-def user_delete(request: Request, uid: str):
+async def user_delete(request: Request, uid: str):
     guard(request)
+    await form(request)
     try:
         Directory().delete_user(uid)
         flash(request, f"ユーザー「{uid}」を削除しました")
@@ -288,8 +320,9 @@ async def group_update(request: Request, cn: str):
 
 
 @app.post("/groups/{cn}/delete")
-def group_delete(request: Request, cn: str):
+async def group_delete(request: Request, cn: str):
     guard(request)
+    await form(request)
     try:
         d = Directory()
         n = d.delete_group(cn)
@@ -338,8 +371,9 @@ async def vlan_save(request: Request):
 
 
 @app.post("/vlan/resync")
-def vlan_resync(request: Request):
+async def vlan_resync(request: Request):
     guard(request)
+    await form(request)
     try:
         changed = radiuspolicy.sync(Directory().list_groups())
         flash(request, "FreeRADIUS へ再反映しました" if changed else "ポリシーは最新です（変更なし）")
@@ -410,19 +444,46 @@ def settings_page(request: Request):
     return page(request, "settings.html", accounts=accounts, cfg=cfg, nav="settings")
 
 
-@app.post("/settings/domain")
-async def settings_domain(request: Request):
+@app.get("/domains", response_class=HTMLResponse)
+def domains_page(request: Request):
+    guard(request)
+    return page(request, "domains.html", domains=domain.list_domains(), nav="domains")
+
+
+@app.post("/domains/create")
+async def domains_create(request: Request):
     guard(request)
     _, v = await form(request)
-    if v("confirm") != "1":
-        flash(request, "確認チェックを入れてください", "error")
-        return back("/settings")
     try:
-        n = domain.change_domain(v("domain"), v("rewrite_mail") == "1")
-        flash(request, f"ドメイン変更を開始しました（{n} エントリ）。反映完了まで数秒〜十数秒お待ちください")
+        name = domain.create(v("domain"), v("admin_password"), v("bind_password"))
+        flash(request, f"ドメイン「{name}」を登録しました。初回の切り替え時にLDAPを初期化します")
     except DirectoryError as e:
         flash(request, str(e), "error")
-    return back("/settings")
+    return back("/domains")
+
+
+@app.post("/domains/switch")
+async def domains_switch(request: Request):
+    guard(request)
+    _, v = await form(request)
+    try:
+        name = domain.switch(v("domain"), v("current_base"))
+        flash(request, f"ドメイン「{name}」へ切り替えています。反映完了までお待ちください")
+    except DirectoryError as e:
+        flash(request, str(e), "error")
+    return back("/domains")
+
+
+@app.post("/domains/delete")
+async def domains_delete(request: Request):
+    guard(request)
+    _, v = await form(request)
+    try:
+        name = domain.delete(v("domain"), v("confirmation"))
+        flash(request, f"ドメイン「{name}」を一覧から削除しました。LDAPデータは退避扱いで保持しています")
+    except DirectoryError as e:
+        flash(request, str(e), "error")
+    return back("/domains")
 
 
 @app.post("/settings/admin")
@@ -484,8 +545,9 @@ async def account_password(request: Request, cn: str):
 
 
 @app.post("/settings/accounts/{cn}/delete")
-def account_delete(request: Request, cn: str):
+async def account_delete(request: Request, cn: str):
     guard(request)
+    await form(request)
     try:
         Directory().delete_service_account(cn)
         flash(request, f"検索用アカウント「{cn}」を削除しました")

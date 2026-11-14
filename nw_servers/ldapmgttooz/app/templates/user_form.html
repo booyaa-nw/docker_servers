@@ -4,7 +4,7 @@
 <p><a href="/users">← ユーザ一覧</a></p>
 <h1>{{ 'ユーザ編集: ' ~ user.uid if user else 'ユーザ追加' }}</h1>
 <div class="grid2">
-<form method="post" action="{{ '/users/' ~ (user.uid|urlencode) if user else '/users/new' }}" class="card">
+<form method="post" action="{{ '/users/' ~ (user.uid|urlencode) if user else '/users/new' }}" class="card"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
   <h2>基本情報</h2>
   <label>ログイン用ユーザ名 <span class="req">必須</span>
     <input name="uid" value="{{ user.uid if user }}" required pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,63}" title="英数字と . _ -（先頭は英数字）">
@@ -36,13 +36,13 @@
 
 {% if user %}
 <div>
-  <form method="post" action="/users/{{ user.uid|urlencode }}/password" class="card">
+  <form method="post" action="/users/{{ user.uid|urlencode }}/password" class="card"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
     <h2>パスワード変更</h2>
     <label>新しいパスワード<input name="password" type="password" required autocomplete="new-password"></label>
     <label>新しいパスワード（確認）<input name="password2" type="password" required autocomplete="new-password"></label>
     <button>パスワードを変更</button>
   </form>
-  <form method="post" action="/users/{{ user.uid|urlencode }}/delete" class="card danger" data-confirm="ユーザ「{{ user.uid }}」を削除します。よろしいですか？">
+  <form method="post" action="/users/{{ user.uid|urlencode }}/delete" class="card danger" data-confirm="ユーザ「{{ user.uid }}」を削除します。よろしいですか？"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
     <h2>削除</h2>
     <p class="small muted">所属グループからも外されます。元に戻せません。</p>
     <button class="danger">ユーザを削除</button>

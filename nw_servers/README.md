@@ -4,39 +4,41 @@
 |---|---|---|
 | nw-openldap | LDAP（ユーザ・グループ・検索用アカウント） | 389/tcp |
 | nw-freeradius | RADIUS（PAP / MS-CHAPv2 / PEAP / EAP-TTLS、Dynamic VLAN） | 1812,1813/udp |
-| nw-ldapadmin | ユーザ管理Web UI（Python/FastAPI） | 8080/tcp |
+| nw-ldapmgttooz | ユーザ管理Web UI（Python/FastAPI） | 8080/tcp |
 
 3つのコンテナは `./ldap-shared/` を共有します。
 
 - `settings.json` … ベースDN、admin管理者、FreeRADIUS検索用アカウント（Web UIの「管理設定」で変更）
 - `freeradius/nwlab_vlan` … Dynamic VLAN ポリシー（Web UIが自動生成）
-- `backup/` … ドメイン変更前のLDIFバックアップ
+- `domains.json` … 各ドメインの設定と退避情報
 - `status-*.json` … 各コンテナの反映状況
 
 設定が変わると openldap / freeradius が自動で再起動します（FreeRADIUSは `-C` で検証してから再起動）。
 
-## 既存環境（LAM構成）からの移行
+## 更新・起動
+
+同じ Compose プロジェクトと既存の `openldap/data`、`ldap-shared` を使ってください。
+旧 Web UI のコンテナがある場合は、名前とポートを確認し、そのコンテナだけを停止・削除してから起動します。
 
 ```sh
-cd ~/.local/docker/nw_servers
-# 念のためLDAPのバックアップ
-docker exec nw-openldap slapcat -f /etc/openldap/slapd.conf > ldap-backup-$(date +%Y%m%d).ldif
-
-# LAMを停止・削除
-docker compose rm -sf lam
-docker volume rm nw_servers_nw-lam-config 2>/dev/null
-
-# zipの中身で上書き（compose.yml / openldap / freeradius / ldapadmin）
-# ※ freeradius/ldap（旧ファイル）は不要になります。ldap.tmpl に置き換わりました
-rm -f freeradius/ldap
-mkdir -p ldap-shared
-docker compose up -d --build openldap freeradius ldapadmin
-docker compose logs -f openldap freeradius ldapadmin
+docker compose up -d --build openldap freeradius ldapmgttooz
+docker compose logs -f openldap freeradius ldapmgttooz
 ```
 
-- 既存の `openldap/data` はそのまま使えます（`.env` のパスワードから `ldap-shared/settings.json` が初回だけ作られます）。
-- 既存のグループ・ユーザは、Web UIで一度保存すると Dynamic VLAN 用の objectClass が自動で付きます。
-- compose.yml の他サービス（influxdb など）は、お手元の内容に合わせてください。
+初期ドメインは `asakusa.lab`（`dc=asakusa,dc=lab`）。既存の settings.json があれば、そのドメインを引き継ぎます。
+新規ドメインに切り替える場合は UI から作成して切り替えてください。既存データの DN は書き換えません。
+
+## ドメイン管理
+
+LdapMgtTooz の「ドメイン」画面で、作成・一覧・切り替え・削除を操作できます。
+
+- 新規ドメインは、初回の切り替え時に OU と FreeRADIUS 用検索アカウントを作ります。ユーザとグループは空です。
+- 一度に稼働するのは 1 ドメインです。LDAP の反映後に FreeRADIUS が切り替わります。
+- ドメインごとに管理者・検索アカウント・MDB・Dynamic VLAN を保持します。再ログインには切替先の認証情報を使います。
+- 使用中のドメインは削除できません。削除は一覧からの除外で、MDB と設定は退避扱いとして保持します。同名で再作成しても旧データは再利用しません。
+
+バックアップには `ldap-shared/` と `openldap/data/` の両方が必要です。
+`domains.json` はドメイン台帳で、各ドメインの認証情報を含みます。
 
 ## 使い方
 
@@ -46,7 +48,7 @@ docker compose logs -f openldap freeradius ldapadmin
 - **グループ** … 追加・編集・名前変更・削除。VLAN ID（空欄可）と優先度
 - **Dynamic VLAN** … 優先度の一括編集、ユーザごとの実効VLAN、生成ポリシーの確認
 - **CSV一括登録** … UTF-8 / Shift_JIS。「確認のみ」で事前チェック可能。テンプレートと書き出しあり
-- **管理設定** … ドメイン変更、admin管理者の変更、検索用アカウント（ou=ServiceAccounts）の追加・パスワード変更・削除・FreeRADIUS用の切り替え
+- **管理設定** … admin管理者の変更、検索用アカウント（ou=ServiceAccounts）の追加・パスワード変更・削除・FreeRADIUS用の切り替え
 
 ### Dynamic VLAN の判定順
 

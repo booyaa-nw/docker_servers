@@ -19,7 +19,7 @@ def _reply(value_expr: str) -> list:
 
 def render(groups: list) -> str:
     lines = [
-        "# このファイルは nw-ldapadmin が自動生成します。直接編集しないでください。",
+        "# このファイルは LdapMgtTooz が自動生成します。直接編集しないでください。",
         "# 評価順: 1) ユーザー個別VLAN  2) グループ（優先度の小さい順）  3) 該当なし→VLAN属性なし",
         "nwlab_vlan {",
         "\tif (&control:Tmp-String-0 && (&control:Tmp-String-0 =~ /^[0-9]+$/)) {",
@@ -35,13 +35,14 @@ def render(groups: list) -> str:
     return "\n".join(lines) + "\n"
 
 
-def sync(groups: list) -> bool:
+def sync(groups: list, cfg=None) -> bool:
     """内容が変わったときだけ書き出す（FreeRADIUS が検知して再起動）。"""
+    path = config.policy_path(cfg or config.load_settings())
     text = render(groups).encode("utf-8")
     try:
-        if config.POLICY.read_bytes() == text:
+        if path.read_bytes() == text:
             return False
     except FileNotFoundError:
         pass
-    config.atomic_write(config.POLICY, text, mode=0o644)
+    config.atomic_write(path, text, mode=0o644)
     return True

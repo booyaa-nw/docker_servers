@@ -5,7 +5,7 @@
 <p class="muted">認証成功時に Tunnel-Type=VLAN / Tunnel-Medium-Type=IEEE-802 / Tunnel-Private-Group-Id を返します。
 評価順: <strong>① ユーザ個別のVLAN</strong> → <strong>② VLAN付きグループ（優先度の小さい順）</strong> → ③ どれにも該当しなければVLAN属性なしで許可。PEAP / EAP-TTLS の内側認証でも同じルールが適用されます。</p>
 
-<form method="post" action="/vlan" class="card">
+<form method="post" action="/vlan" class="card"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
   <h2>グループのVLANと優先度</h2>
   <table class="list">
     <thead><tr><th>グループ</th><th>VLAN ID（空欄=なし）</th><th>優先度</th><th>メンバー数</th></tr></thead>
@@ -43,6 +43,6 @@
 <details class="card">
   <summary>生成される FreeRADIUS ポリシー（参考）</summary>
   <pre>{{ policy }}</pre>
-  <form method="post" action="/vlan/resync"><button>FreeRADIUS へ再反映</button></form>
+  <form method="post" action="/vlan/resync"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}"><button>FreeRADIUS へ再反映</button></form>
 </details>
 {% endblock %}

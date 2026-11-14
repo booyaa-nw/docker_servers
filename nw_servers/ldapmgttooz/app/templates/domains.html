@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}ドメイン管理{% endblock %}
+{% block content %}
+<h1>ドメイン管理</h1>
+<p>LDAPとFreeRADIUSが使用するドメインは一度に1つです。切り替え時は認証が一時停止します。</p>
+<div class="card">
+  <h2>作成済みドメイン</h2>
+  <table class="list">
+    <thead><tr><th>名前 / ベースDN</th><th>状態・切り替え</th><th>削除</th></tr></thead>
+    <tbody>
+    {% for d in domains %}
+    <tr>
+      <td><strong>{{ d.name }}</strong><br><code>{{ d.base_dn }}</code></td>
+      <td>{% if d.active %}<span class="tag">使用中</span>{% else %}
+        <form method="post" action="/domains/switch" data-confirm="LDAPとRADIUSをこのドメインへ切り替えますか？"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
+          <input type="hidden" name="domain" value="{{ d.name }}">
+          <input type="hidden" name="current_base" value="{{ base_dn }}">
+          <button>切り替える</button>
+        </form>
+      {% endif %}</td>
+      <td>{% if not d.active %}
+        <form method="post" action="/domains/delete" class="inline-form" data-confirm="ドメインを管理一覧から削除しますか？データは保持します。"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
+          <input type="hidden" name="domain" value="{{ d.name }}">
+          <input name="confirmation" aria-label="削除確認のドメイン名" placeholder="{{ d.name }}" required>
+          <button class="danger">削除</button>
+        </form>
+      {% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<form method="post" action="/domains/create" class="card"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
+  <h2>ドメインの新規作成</h2>
+  <p>空のドメインを登録します。初回の切り替え時にOUとFreeRADIUS用の検索アカウントを作成します。</p>
+  <label>ドメイン名<input name="domain" placeholder="example.test" required></label>
+  <label>LDAP管理者 admin のパスワード<input type="password" name="admin_password" minlength="8" autocomplete="new-password" required></label>
+  <label>RADIUS検索アカウント radius のパスワード<input type="password" name="bind_password" minlength="8" autocomplete="new-password" required></label>
+  <button class="primary">ドメインを登録</button>
+</form>
+{% endblock %}

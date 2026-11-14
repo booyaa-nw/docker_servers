@@ -1,184 +1,58 @@
 services:
-  # OpenLDAP: shared user/group directory for FortiGate and FreeRADIUS.
+  # ディレクトリ（ユーザー: inetOrgPerson+posixAccount / グループ: posixGroup / Dynamic VLAN用スキーマ）
   openldap:
-    build: ./ldap/openldap
-    image: nw-openldap:debian13
+    build: ./openldap
+    image: nwlab/openldap:local
     container_name: nw-openldap
     restart: unless-stopped
+    ports:
+      - "389:389/tcp"
     environment:
       TZ: Asia/Tokyo
-      LDAP_DOMAIN: "${LDAP_DOMAIN:?Set LDAP_DOMAIN in .env}"
-      LDAP_BASE_DN: "${LDAP_BASE_DN:?Set LDAP_BASE_DN in .env}"
+      # 以下は初回起動時（ldap-shared/settings.json がないとき）だけ使われます
+      LDAP_BASE_DN: "dc=asakusa,dc=lab"
       LDAP_ADMIN_PASSWORD: "${LDAP_ADMIN_PASSWORD:?Set LDAP_ADMIN_PASSWORD in .env}"
-      LAM_BIND_PASSWORD: "${LAM_BIND_PASSWORD:?Set LAM_BIND_PASSWORD in .env}"
-      FORTIGATE_BIND_PASSWORD: "${FORTIGATE_BIND_PASSWORD:?Set FORTIGATE_BIND_PASSWORD in .env}"
-      RADIUS_BIND_PASSWORD: "${RADIUS_BIND_PASSWORD:?Set RADIUS_BIND_PASSWORD in .env}"
-      LDAP_TEST_PASSWORD: "${LDAP_TEST_PASSWORD:?Set LDAP_TEST_PASSWORD in .env}"
-      LDAP_ALLOW_PLAINTEXT: "${LDAP_ALLOW_PLAINTEXT:-false}"
-    ports:
-      - "172.16.201.173:389:389/tcp"
-      - "172.16.201.173:636:636/tcp"
+      LDAP_RADIUS_PASSWORD: "${LDAP_RADIUS_PASSWORD:?Set LDAP_RADIUS_PASSWORD in .env}"
+      LDAP_USER1_PASSWORD: "${LDAP_USER1_PASSWORD:?Set LDAP_USER1_PASSWORD in .env}"
+      LDAP_USER2_PASSWORD: "${LDAP_USER2_PASSWORD:?Set LDAP_USER2_PASSWORD in .env}"
     volumes:
-      - ldap-state:/state
-      - ./ldap/certs:/certs:ro
-    healthcheck:
-      test: ["CMD", "ldapsearch", "-x", "-H", "ldap://127.0.0.1", "-b", "", "-s", "base", "namingContexts"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
+      - ./openldap/slapd.conf.tmpl:/templates/slapd.conf.tmpl:ro
+      - ./openldap/bootstrap.ldif.tmpl:/templates/bootstrap.ldif.tmpl:ro
+      - ./openldap/data:/var/lib/openldap/openldap-data
+      - ./ldap-shared:/shared
 
-  # LDAP Account Manager: lab LAN access on port 8081.
-  lam:
-    image: ghcr.io/ldapaccountmanager/lam:9.6
-    container_name: nw-lam
-    restart: unless-stopped
-    ports:
-      - "172.16.201.173:8081:80"
-    environment:
-      TZ: Asia/Tokyo
-      LAM_SKIP_PRECONFIGURE: "${LAM_SKIP_PRECONFIGURE:-false}"
-      LAM_PASSWORD: "${LAM_CONFIG_PASSWORD:?Set LAM_CONFIG_PASSWORD in .env}"
-      LDAP_DOMAIN: "${LDAP_DOMAIN}"
-      LDAP_BASE_DN: "${LDAP_BASE_DN}"
-      LDAP_USERS_DN: "ou=people,${LDAP_BASE_DN}"
-      LDAP_GROUPS_DN: "ou=groups,${LDAP_BASE_DN}"
-      LDAP_SERVER: ldaps://openldap:636
-      LDAP_USER: "uid=lam-admin,ou=service-accounts,${LDAP_BASE_DN}"
-      LAM_LANG: ja_JP
-      LDAPTLS_CACERT: /certs/ca.crt
-      LDAPTLS_REQCERT: demand
-    volumes:
-      - lam-config:/var/lib/ldap-account-manager/config
-      - ./ldap/certs/ca.crt:/certs/ca.crt:ro
-    depends_on:
-      openldap:
-        condition: service_healthy
-
-  # LDAP-backed RADIUS. File-based local test users are not used.
+  # RADIUS（LDAP参照 / PAP・MS-CHAPv2・PEAP / Dynamic VLAN）
   freeradius:
-    build: ./ldap/radius
-    image: nw-freeradius-ldap:debian13
+    build: ./freeradius
+    image: nwlab/freeradius:local
     container_name: nw-freeradius
     restart: unless-stopped
     ports:
-      - "172.16.201.173:1812:1812/udp"
-      - "172.16.201.173:1813:1813/udp"
+      - "1812:1812/udp"
+      - "1813:1813/udp"
     environment:
       TZ: Asia/Tokyo
       RADIUS_SECRET: "${RADIUS_SECRET:?Set RADIUS_SECRET in .env}"
-      LDAP_BASE_DN: "${LDAP_BASE_DN}"
-      RADIUS_BIND_PASSWORD: "${RADIUS_BIND_PASSWORD}"
+      RADIUS_DEBUG: "${RADIUS_DEBUG:-0}"     # 1 にすると freeradius -X
     volumes:
       - ./freeradius/clients.conf:/etc/freeradius/3.0/clients.conf:ro
-      - ./ldap/radius/ldap:/etc/freeradius/3.0/mods-enabled/ldap:ro
-      - ./ldap/radius/lab_ldap:/etc/freeradius/3.0/policy.d/lab_ldap:ro
-      - ./ldap/certs/ca.crt:/certs/ca.crt:ro
+      - ./freeradius/ldap.tmpl:/templates/ldap.tmpl:ro
+      - ./ldap-shared:/shared
     depends_on:
-      openldap:
-        condition: service_healthy
+      - openldap
 
-  tftpd-hpa:
-    image: 3x3cut0r/tftpd-hpa
-    environment:
-        TZ: Europe/Berlin
-        CREATE: 1
-        VERBOSE: 1
-    volumes:
-      - ./public:/tftpboot
-    ports:
-      - 69:69/udp
-
-  sftpgo:
-    image: drakkan/sftpgo:v2.7.5-alpine
-    container_name: nw-sftpgo
-    restart: unless-stopped
-    user: "0:0"
-    ports:
-      - "0.0.0.0:8021:8080"
-      - "0.0.0.0:21:2121"
-      - "0.0.0.0:50000-50020:50000-50020"
-    environment:
-      SFTPGO_FTPD__BINDINGS__0__PORT: "2121"
-      SFTPGO_FTPD__DISABLE_ACTIVE_MODE: "false"
-      SFTPGO_FTPD__ACTIVE_TRANSFERS_PORT_NON_20: "true"
-      SFTPGO_FTPD__PASSIVE_PORT_RANGE__START: "50000"
-      SFTPGO_FTPD__PASSIVE_PORT_RANGE__END: "50020"
-      SFTPGO_SFTPD__BINDINGS__0__PORT: "0"
-      SFTPGO_GRACE_TIME: "30"
-    volumes:
-      - ./sftpgo/:/srv/sftpgo
-      - ./sftpgo/config:/var/lib/sftpgo
-    stop_grace_period: 40s
-
-  mailpit:
-    image: axllent/mailpit
-    container_name: nw-mailpit
-    ports:
-      - "25:1025"
-      - "8025:8025"
-    environment:
-      - TZ=Asia/Tokyo
-    restart: always
-
-  influxdb:
-    image: influxdb:2
-    container_name: nw-influxdb
+  # LDAPユーザ管理 Web UI（http://<ホスト>:8080/）
+  ldapmgttooz:
+    build: ./ldapmgttooz
+    image: nwlab/ldapmgttooz:local
+    container_name: nw-ldapmgttooz
     restart: unless-stopped
     ports:
-      - "8086:8086"
-    volumes:
-      - ./influxdb2:/var/lib/influxdb2
+      - "8080:8080"
     environment:
-      DOCKER_INFLUXDB_INIT_MODE: setup
-      DOCKER_INFLUXDB_INIT_USERNAME: admin
-      DOCKER_INFLUXDB_INIT_PASSWORD: ChangeMeStrongPassword
-      DOCKER_INFLUXDB_INIT_ORG: nwlab
-      DOCKER_INFLUXDB_INIT_BUCKET: nw_events
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ChangeMeLongRandomToken
-
-  grafana:
-    image: grafana/grafana-oss:12.4.3
-    container_name: nw-grafana
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
+      TZ: Asia/Tokyo
+      LDAP_URI: ldap://nw-openldap:389
     volumes:
-      - grafana-vl:/var/lib/grafana
+      - ./ldap-shared:/shared
     depends_on:
-      - influxdb
-
-  # Syslog受信・自動判別・ファイル書き出しを担当
-  vector:
-    image: timberio/vector:0.57.0-alpine
-    container_name: nw-vector
-    restart: unless-stopped
-    ports:
-      - "514:514/udp"
-      - "514:514/tcp"
-    volumes:
-      - ./vector/vector.yaml:/etc/vector/vector.yaml:ro
-      - ./logs:/var/log/nw-telegraf
-    depends_on:
-      - influxdb
-
-  # SNMP Trap受信専用として継続利用
-  telegraf:
-    image: telegraf:latest
-    container_name: nw-telegraf
-    restart: unless-stopped
-    ports:
-      - "162:162/udp"
-      - "162:162/tcp"
-    volumes:
-      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
-      - ./logs:/var/log/nw-telegraf
-      - ./mibs:/usr/share/snmp/mibs:ro
-    depends_on:
-      - influxdb
-    cap_add:
-      - NET_BIND_SERVICE
-
-volumes:
-  ldap-state:
-  lam-config:
-  grafana-vl:
+      - openldap

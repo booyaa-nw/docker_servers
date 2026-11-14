@@ -1,34 +1,32 @@
 #!/bin/sh
 # nw-openldap: 共有設定(settings.json)を監視し、変更があれば slapd を再起動する。
-# ドメイン変更時は Web UI が書き出した import.ldif を取り込む（取り込み前にバックアップ）。
+# ドメインごとに独立したMDBを使用する。
 set -eu
 
 SHARED=${SHARED_DIR:-/shared}
 SETTINGS=$SHARED/settings.json
 STATUS=$SHARED/status-ldap.json
 IMPORT=$SHARED/import.ldif
-BACKUP=$SHARED/backup
 TEMPLATES=${TEMPLATE_DIR:-/templates}
 CONF=${SLAPD_CONF:-/etc/openldap/slapd.conf}
 
 export SCHEMA_DIR=${SCHEMA_DIR:-/etc/openldap/schema}
 export MODULE_DIR=${MODULE_DIR:-/usr/lib/openldap}
 export RUN_DIR=${RUN_DIR:-/run/openldap}
-export DATA_DIR=${DATA_DIR:-/var/lib/openldap/openldap-data}
+DATA_ROOT=${DATA_DIR:-/var/lib/openldap/openldap-data}
 SLAPD_USER=${SLAPD_USER:-ldap}
 SLAPD_URLS=${SLAPD_URLS:-ldap:///}
 LOCAL_URI=${LOCAL_URI:-ldap://127.0.0.1}
 
-MARKER=$DATA_DIR/.bootstrapped
 PID=""
-ERR=""
 
 log() { echo "[openldap] $*"; }
 now() { date '+%Y-%m-%dT%H:%M:%S%z'; }
 get() { jq -r "$1" "$SETTINGS"; }
 
-mkdir -p "$RUN_DIR" "$DATA_DIR" "$BACKUP"
-chown -R "$SLAPD_USER:$SLAPD_USER" "$RUN_DIR" "$DATA_DIR"
+umask 077
+mkdir -p "$RUN_DIR" "$DATA_ROOT"
+chown "$SLAPD_USER:$SLAPD_USER" "$RUN_DIR"
 
 write_status() { # $1=generation $2=true/false $3=message
   jq -n --argjson g "$1" --argjson ok "$2" --arg m "$3" --arg t "$(now)" --arg b "$(get .base_dn)" \
@@ -38,6 +36,10 @@ write_status() { # $1=generation $2=true/false $3=message
 
 seed_settings() {
   [ -s "$SETTINGS" ] && return 0
+  if [ -e "$DATA_ROOT/data.mdb" ]; then
+    log "既存のMDBに対応するsettings.jsonがありません。元の設定を復元してください"
+    exit 1
+  fi
   : "${LDAP_BASE_DN:?}" "${LDAP_ADMIN_PASSWORD:?}" "${LDAP_RADIUS_PASSWORD:?}"
   log "settings.json がないため環境変数から作成します"
   jq -n --arg base "$LDAP_BASE_DN" --arg apw "$LDAP_ADMIN_PASSWORD" --arg bpw "$LDAP_RADIUS_PASSWORD" \
@@ -91,61 +93,61 @@ bootstrap() {
   LDAP_DC=$(echo "$LDAP_DOMAIN" | cut -d. -f1)
   LDAP_BIND_PASSWORD=$(get .bind_password)
   export LDAP_DOMAIN LDAP_DC LDAP_BIND_PASSWORD
-  envsubst '${LDAP_BASE_DN} ${LDAP_DOMAIN} ${LDAP_DC} ${LDAP_BIND_DN} ${LDAP_BIND_PASSWORD} ${LDAP_USER1_PASSWORD} ${LDAP_USER2_PASSWORD}' \
-    < "$TEMPLATES/bootstrap.ldif.tmpl" \
-    | ldapadd -x -H "$LOCAL_URI" -D "$LDAP_ADMIN_DN" -w "$(get .admin_password)"
+  if [ "$SLOT" = legacy ]; then
+    envsubst '${LDAP_BASE_DN} ${LDAP_DOMAIN} ${LDAP_DC} ${LDAP_BIND_DN} ${LDAP_BIND_PASSWORD} ${LDAP_USER1_PASSWORD} ${LDAP_USER2_PASSWORD}' < "$TEMPLATES/bootstrap.ldif.tmpl"
+  else
+    printf 'dn: %s\nobjectClass: dcObject\nobjectClass: organization\ndc: %s\no: %s\n\n' "$LDAP_BASE_DN" "$LDAP_DC" "$LDAP_DOMAIN"
+    for ou in Users Groups ServiceAccounts; do
+      printf 'dn: ou=%s,%s\nobjectClass: organizationalUnit\nou: %s\n\n' "$ou" "$LDAP_BASE_DN" "$ou"
+    done
+    printf 'dn: %s\nobjectClass: organizationalRole\nobjectClass: simpleSecurityObject\ncn: radius\nuserPassword:: %s\n\n' "$LDAP_BIND_DN" "$(printf '%s' "$LDAP_BIND_PASSWORD" | base64 | tr -d '\n')"
+  fi > "$RUN_DIR/seed.ldif"
+  ldapadd -x -H "$LOCAL_URI" -D "$LDAP_ADMIN_DN" -w "$(get .admin_password)" -f "$RUN_DIR/seed.ldif"
+  rm -f "$RUN_DIR/seed.ldif"
   stop_slapd
   touch "$MARKER"
   log "初期データの投入が完了しました"
 }
 
-# ドメイン変更: import.ldif を検証 → 現DBをバックアップ → 入れ替え
-apply_import() {
-  ts=$(date +%Y%m%d-%H%M%S)
-  render "$CONF.new"
-  if ! slapadd -u -f "$CONF.new" -l "$IMPORT" > /tmp/slapadd.log 2>&1; then
-    ERR="ドメイン変更に失敗したため元に戻しました: $(tail -3 /tmp/slapadd.log | tr '\n' ' ')"
-    log "$ERR"
-    rm -f "$CONF.new"
-    mv "$IMPORT" "$BACKUP/import-failed-$ts.ldif"
-    jq --arg b "$CUR_BASE" '.base_dn=$b | .previous_base_dn=null | .generation += 1' "$SETTINGS" > "$SETTINGS.tmp"
-    chmod 600 "$SETTINGS.tmp"
-    mv "$SETTINGS.tmp" "$SETTINGS"
-    return 1
-  fi
-  if [ -f "$MARKER" ]; then
-    slapcat -f "$CONF" -o ldif-wrap=no > "$BACKUP/before-domain-change-$ts.ldif"
-    log "変更前のデータを backup/before-domain-change-$ts.ldif に保存しました"
-  fi
-  find "$DATA_DIR" -maxdepth 1 -name '*.mdb' -delete
-  mv "$CONF.new" "$CONF"
-  slapadd -f "$CONF" -l "$IMPORT"
-  chown -R "$SLAPD_USER:$SLAPD_USER" "$DATA_DIR"
-  mv "$IMPORT" "$BACKUP/imported-$ts.ldif"
-  touch "$MARKER"
-  log "ドメインを $(get .base_dn) に変更しました"
-}
-
 trap 'stop_slapd; exit 0' TERM INT
 
 seed_settings
-render "$CONF"
-CUR_BASE=$(get .base_dn)
-if [ ! -f "$MARKER" ] && [ ! -f "$IMPORT" ]; then
-  bootstrap
+if [ -f "$IMPORT" ]; then
+  log "旧移行の import.ldif が残っています。確認・退避してから再起動してください"
+  exit 1
 fi
 
 while :; do
-  KEEP_ERR=0
-  if [ -f "$IMPORT" ]; then
-    apply_import || KEEP_ERR=1
-  fi
+  cp "$SETTINGS" "$RUN_DIR/settings.json"
+  live_settings=$SETTINGS
+  SETTINGS=$RUN_DIR/settings.json
   GEN=$(get .generation)
-  render "$CONF"
   CUR_BASE=$(get .base_dn)
-  if [ -f "$MARKER" ]; then
-    slapindex -q -f "$CONF" 2>/dev/null || true
-    chown -R "$SLAPD_USER:$SLAPD_USER" "$DATA_DIR"
+  SLOT=$(jq -r '.data_slot // "legacy"' "$SETTINGS")
+  case "$SLOT" in
+    legacy) DATA_DIR=$DATA_ROOT ;;
+    *) if ! printf '%s\n' "$SLOT" | grep -Eq '^[a-f0-9]{32}$'; then exit 1; fi
+       DATA_DIR=$DATA_ROOT/domains/$SLOT ;;
+  esac
+  export DATA_DIR
+  MARKER=$DATA_DIR/.bootstrapped
+  mkdir -p "$DATA_DIR"
+  chown "$SLAPD_USER:$SLAPD_USER" "$DATA_DIR"
+  if [ "$SLOT" != legacy ]; then
+    chown "$SLAPD_USER:$SLAPD_USER" "$DATA_ROOT" "$DATA_ROOT/domains"
+  fi
+  render "$CONF"
+  if [ "$SLOT" = legacy ] && [ -f "$MARKER" ]; then
+    chown "$SLAPD_USER:$SLAPD_USER" "$DATA_DIR/data.mdb"
+    if [ -e "$DATA_DIR/lock.mdb" ]; then chown "$SLAPD_USER:$SLAPD_USER" "$DATA_DIR/lock.mdb"; fi
+  fi
+  if [ ! -f "$MARKER" ]; then
+    if [ -e "$DATA_DIR/data.mdb" ]; then
+      log "初期化情報のない既存MDBを保護するため停止します: $CUR_BASE"
+      exit 1
+    fi
+    write_status "$GEN" false "LDAPの初期化中、または初期化で停止しました"
+    bootstrap
   fi
 
   start_slapd "$SLAPD_URLS"
@@ -154,11 +156,8 @@ while :; do
     log "slapd の起動に失敗しました"
     exit 1
   fi
-  if [ "$KEEP_ERR" = 1 ]; then
-    write_status "$GEN" false "$ERR"
-  else
-    write_status "$GEN" true "反映済み"
-  fi
+  write_status "$GEN" true "反映済み"
+  SETTINGS=$live_settings
   log "slapd 起動 (generation=$GEN, base=$CUR_BASE)"
 
   while :; do

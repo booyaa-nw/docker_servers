@@ -3,7 +3,7 @@
 {% block content %}
 <h1>CSV一括登録</h1>
 <div class="grid2">
-<form method="post" action="/import" enctype="multipart/form-data" class="card">
+<form method="post" action="/import" enctype="multipart/form-data" class="card"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
   <h2>ファイルを選択</h2>
   <label>CSVファイル（UTF-8 / Shift_JIS）<input type="file" name="file" accept=".csv,text/csv" required></label>
   <fieldset>

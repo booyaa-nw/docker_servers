@@ -7,3 +7,8 @@ pki/offline/
 pki/secrets/
 pki/import/
 pki/.build/
+
+.ldapmgttooz-test-deps/
+nw_servers/ldap-shared/
+nw_servers/openldap/data/
+**/__pycache__/

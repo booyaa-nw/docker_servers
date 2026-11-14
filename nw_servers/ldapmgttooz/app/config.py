@@ -11,7 +11,7 @@ STATUS_LDAP = SHARED / "status-ldap.json"
 STATUS_RADIUS = SHARED / "status-radius.json"
 IMPORT_LDIF = SHARED / "import.ldif"
 POLICY = SHARED / "freeradius" / "nwlab_vlan"
-SECRET_FILE = SHARED / "ldapadmin-secret"
+SECRET_FILE = SHARED / "ldapmgttooz-secret"
 
 LDAP_URI = os.environ.get("LDAP_URI", "ldap://nw-openldap:389")
 
@@ -58,21 +58,27 @@ def save_settings(cfg: dict) -> dict:
 
 
 def session_secret() -> str:
-    env = os.environ.get("LDAPADMIN_SECRET")
+    env = os.environ.get("LDAPMGTTOOZ_SECRET") or os.environ.get("LDAPADMIN_SECRET")
     if env:
         return env
     try:
         return SECRET_FILE.read_text().strip()
     except FileNotFoundError:
-        s = secrets.token_urlsafe(48)
+        legacy = SHARED / "ldapadmin-secret"
+        s = legacy.read_text().strip() if legacy.is_file() else secrets.token_urlsafe(48)
         atomic_write(SECRET_FILE, s.encode())
         return s
+
+
+def policy_path(cfg):
+    slot = cfg.get("data_slot")
+    return POLICY.parent / slot / POLICY.name if slot else POLICY
 
 
 def radius_signature() -> str:
     cfg = read_json(SETTINGS) or {}
     try:
-        p = hashlib.md5(POLICY.read_bytes()).hexdigest()
+        p = hashlib.md5(policy_path(cfg).read_bytes()).hexdigest()
     except FileNotFoundError:
         p = "none"
     return f"{cfg.get('generation', 0)}-{p}"

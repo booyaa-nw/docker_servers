@@ -33,10 +33,28 @@ nwlab_vlan {
 EOF
 }
 
+policy_source() {
+  local slot
+  slot=$(jq -r '.data_slot // empty' "$SETTINGS")
+  if [ -n "$slot" ]; then
+    [[ "$slot" =~ ^[a-f0-9]{32}$ ]] || return 1
+    printf '%s/freeradius/%s/nwlab_vlan' "$SHARED" "$slot"
+  else
+    printf '%s' "$POLICY_SRC"
+  fi
+}
+
+ldap_ready() {
+  local g
+  g=$(jq -r .generation "$SETTINGS") || return 1
+  jq -e --argjson g "$g" '.ok == true and .applied_generation == $g' "$SHARED/status-ldap.json" >/dev/null 2>&1
+}
+
 signature() {
-  local g p
+  local g p src
   g=$(jq -r .generation "$SETTINGS" 2>/dev/null || echo 0)
-  if [ -f "$POLICY_SRC" ]; then p=$(md5sum < "$POLICY_SRC" | cut -d' ' -f1); else p=none; fi
+  src=$(policy_source) || return 1
+  if [ -f "$src" ]; then p=$(md5sum < "$src" | cut -d' ' -f1); else p=none; fi
   echo "$g-$p"
 }
 
@@ -52,7 +70,9 @@ apply() {
   LDAP_BIND_DN="$(jq -r .bind_rdn "$SETTINGS"),$LDAP_BASE_DN"
   LDAP_BIND_PW=$(jq -r .bind_password "$SETTINGS")
   envsubst '${LDAP_SERVER} ${LDAP_BASE_DN} ${LDAP_BIND_DN}' < "$TEMPLATES/ldap.tmpl" > /tmp/nwlab-stage/ldap
-  if [ -s "$POLICY_SRC" ]; then cp "$POLICY_SRC" /tmp/nwlab-stage/nwlab_vlan; else default_policy > /tmp/nwlab-stage/nwlab_vlan; fi
+  local src
+  src=$(policy_source) || return 1
+  if [ -s "$src" ]; then cp "$src" /tmp/nwlab-stage/nwlab_vlan; else default_policy > /tmp/nwlab-stage/nwlab_vlan; fi
 
   rm -f /tmp/nwlab-prev/*
   [ -f "$R/mods-enabled/ldap" ] && cp -p "$R/mods-enabled/ldap" /tmp/nwlab-prev/ldap
@@ -94,6 +114,7 @@ stop() {
 
 trap 'stop; exit 0' TERM INT
 
+until ldap_ready; do sleep 2; done
 SIG=$(signature)
 if ! apply; then
   write_status "$SIG" false "FreeRADIUS の設定検証に失敗しました: $(grep -iE 'error|fail' /tmp/nwlab-check.log | tail -2 | tr '\n' ' ')"
@@ -109,6 +130,7 @@ while sleep 2; do
     log "freeradius が停止しました"
     exit 1
   fi
+  ldap_ready || continue
   NEW=$(signature)
   [ "$NEW" = "$SIG" ] && continue
   SIG=$NEW

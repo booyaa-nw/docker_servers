@@ -15,18 +15,12 @@
 </div>
 
 <div class="grid2">
-<form method="post" action="/settings/domain" class="card" data-confirm="ドメインを変更します。LDAPとRADIUSが数秒〜十数秒停止します。よろしいですか？">
-  <h2>ドメインの変更</h2>
-  <p class="small muted">全エントリのDNを新しいドメインに置き換えて入れ替えます。変更前のデータは共有フォルダの backup/ に保存されます。
-  NW機器側のLDAP設定（ベースDN・バインドDN）の変更も必要です。</p>
-  <label>現在のドメイン<input value="{{ domain }}" disabled></label>
-  <label>新しいドメイン<input name="domain" placeholder="example.local" required pattern="[A-Za-z0-9.\-]+"></label>
-  <label class="check"><input type="checkbox" name="rewrite_mail" value="1" checked> メールアドレスの @{{ domain }} も置き換える</label>
-  <label class="check"><input type="checkbox" name="confirm" value="1" required> 実行中は認証が一時的に止まることを理解しました</label>
-  <button class="danger">ドメインを変更</button>
-</form>
+<div class="card">
+  <h2>ドメイン管理</h2>
+  <p>ドメインの新規作成・切り替え・削除は<a href="/domains">ドメイン一覧</a>から行えます。</p>
+</div>
 
-<form method="post" action="/settings/admin" class="card">
+<form method="post" action="/settings/admin" class="card"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
   <h2>admin管理者</h2>
   <p class="small muted">LDAPの管理者（rootdn）とこの画面のログインに使います。</p>
   <label>管理者名<input name="name" value="{{ admin_name }}" required></label>
@@ -50,7 +44,7 @@
       <td>{{ '★ ' if a.radius }}<strong>{{ a.cn }}</strong><br><code class="small">{{ a.dn }}</code></td>
       <td class="small">{{ a.description }}</td>
       <td>
-        <form method="post" action="/settings/accounts/{{ a.cn|urlencode }}/password" class="inline-form">
+        <form method="post" action="/settings/accounts/{{ a.cn|urlencode }}/password" class="inline-form"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
           <input name="password" type="password" placeholder="新しいパスワード" required autocomplete="new-password">
           <input name="password2" type="password" placeholder="確認" required autocomplete="new-password">
           <button class="small">変更</button>
@@ -58,13 +52,13 @@
       </td>
       <td>
         {% if a.radius %}<span class="tag">使用中</span>{% else %}
-        <form method="post" action="/settings/accounts/{{ a.cn|urlencode }}/radius" class="inline-form" data-confirm="FreeRADIUS の検索用アカウントを「{{ a.cn }}」に切り替えます。よろしいですか？">
+        <form method="post" action="/settings/accounts/{{ a.cn|urlencode }}/radius" class="inline-form" data-confirm="FreeRADIUS の検索用アカウントを「{{ a.cn }}」に切り替えます。よろしいですか？"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
           <input name="password" type="password" placeholder="このアカウントのパスワード" required>
           <button class="small">切り替え</button>
         </form>{% endif %}
       </td>
       <td class="right">{% if not a.radius %}
-        <form method="post" action="/settings/accounts/{{ a.cn|urlencode }}/delete" data-confirm="「{{ a.cn }}」を削除します。連携中の機器は認証できなくなります。よろしいですか？">
+        <form method="post" action="/settings/accounts/{{ a.cn|urlencode }}/delete" data-confirm="「{{ a.cn }}」を削除します。連携中の機器は認証できなくなります。よろしいですか？"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
           <button class="small danger">削除</button>
         </form>{% endif %}
       </td>
@@ -72,7 +66,7 @@
     {% endfor %}
     </tbody>
   </table>
-  <form method="post" action="/settings/accounts/new" class="inline-form add">
+  <form method="post" action="/settings/accounts/new" class="inline-form add"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
     <input name="cn" placeholder="アカウント名（例: manager）" required pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,63}">
     <input name="description" placeholder="説明（例: FortiGate LDAP連携用）">
     <input name="password" type="password" placeholder="パスワード" required autocomplete="new-password">
