@@ -28,9 +28,9 @@ umask 077
 mkdir -p "$RUN_DIR" "$DATA_ROOT"
 chown "$SLAPD_USER:$SLAPD_USER" "$RUN_DIR"
 
-write_status() { # $1=generation $2=true/false $3=message
-  jq -n --argjson g "$1" --argjson ok "$2" --arg m "$3" --arg t "$(now)" --arg b "$(get .base_dn)" \
-    '{applied_generation:$g, ok:$ok, message:$m, base_dn:$b, time:$t}' > "$STATUS.tmp"
+write_status() { # $1=generation $2=true/false $3=message $4=phase (optional)
+  jq -n --argjson g "$1" --argjson ok "$2" --arg m "$3" --arg t "$(now)" --arg b "$(get .base_dn)" --arg phase "${4:-}" \
+    '{applied_generation:$g, ok:$ok, message:$m, base_dn:$b, time:$t, phase:$phase}' > "$STATUS.tmp"
   mv "$STATUS.tmp" "$STATUS"
 }
 
@@ -146,8 +146,10 @@ while :; do
       log "初期化情報のない既存MDBを保護するため停止します: $CUR_BASE"
       exit 1
     fi
-    write_status "$GEN" false "LDAPの初期化中、または初期化で停止しました"
+    write_status "$GEN" false "LDAPを初期化しています" pending
+    trap 'stop_slapd; write_status "$GEN" false "LDAPの初期化に失敗しました（docker compose logs openldap を確認してください）"' EXIT
     bootstrap
+    trap - EXIT
   fi
 
   start_slapd "$SLAPD_URLS"

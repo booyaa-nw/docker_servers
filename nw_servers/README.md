@@ -66,3 +66,19 @@ PEAP / EAP-TTLS では内側の認証で判定し、外側の Access-Accept に�
 - ドメイン変更・admin変更・検索用アカウント切替の間（数秒〜十数秒）は認証が止まります。
 - NW機器側のLDAP設定（ベースDN、バインドDN/パスワード）は、ドメインや検索用アカウントを変えたら合わせて変更してください。
 - RADIUSのデバッグ: `.env` に `RADIUS_DEBUG=1` を書いて `docker compose up -d freeradius`。
+
+## ドメイン管理者パスワードの復旧
+
+Docker を操作できるホスト管理者が、旧パスワードなしで指定ドメインの LDAP 管理者パスワードを再設定できます。
+初回は `docker compose build ldapmgttooz` で復旧コマンドを含むイメージを作成してください。
+
+```sh
+docker compose stop ldapmgttooz
+docker compose run --rm --no-deps --entrypoint python ldapmgttooz -m app.reset_admin asakusa.lab
+docker compose up -d --no-deps ldapmgttooz
+```
+
+新パスワードを非表示で2回入力します。復旧処理の成否にかかわらず、最後の起動コマンドを実行してください。
+Web UI を停止するのは、復旧中に管理画面から同じ設定が変更されるのを防ぐためです。
+使用中のドメインでは LDAP が設定を再読み込みし、未使用のドメインでは次回切り替え時に反映します。
+ログイン名と FreeRADIUS の検索用パスワードは変わりません。

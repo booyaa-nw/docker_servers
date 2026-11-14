@@ -89,12 +89,15 @@ def apply_state() -> dict:
     cfg = read_json(SETTINGS) or {}
     sl = read_json(STATUS_LDAP) or {}
     sr = read_json(STATUS_RADIUS) or {}
-    ldap_pending = sl.get("applied_generation") != cfg.get("generation")
-    radius_pending = sr.get("applied_signature") != radius_signature()
+    ldap_current = bool(sl) and sl.get("applied_generation") == cfg.get("generation")
+    radius_current = sr.get("applied_signature") == radius_signature()
+    initializing = ldap_current and sl.get("phase") == "pending"
+    ldap_pending = not ldap_current or not sl.get("ok", True) or initializing
+    radius_pending = not radius_current or not sr.get("ok", True)
     errors = []
-    if sl and not sl.get("ok", True):
+    if ldap_current and not initializing and not sl.get("ok", True):
         errors.append("LDAP: " + sl.get("message", ""))
-    if sr and not sr.get("ok", True):
+    if radius_current and not sr.get("ok", True):
         errors.append("RADIUS: " + sr.get("message", ""))
     return {
         "ldap_pending": ldap_pending,

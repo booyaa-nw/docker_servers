@@ -89,3 +89,22 @@ def delete(name, confirmation):
         catalog["deleted"].append({"name": name, "profile": profile})
         _save(catalog)
     return name
+
+
+def reset_admin_password(name, password):
+    """Host operator recovery only. Stop the Web UI before running the CLI."""
+    name = check_domain(name)
+    if len(password) < 8 or any(c in password for c in "\r\n\x00"):
+        raise DirectoryError("パスワードは改行やNULを含まない8文字以上にしてください")
+    with LOCK:
+        active, catalog = _state()
+        if name not in catalog["domains"]:
+            raise DirectoryError("指定ドメインがありません")
+        profile = catalog["domains"][name]
+        profile["admin_password"] = password
+        if name == active:
+            # _state always uses live settings for the active profile.
+            config.save_settings(profile)
+        else:
+            _save(catalog)
+    return name == active, profile["admin_rdn"]
