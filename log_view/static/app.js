@@ -129,7 +129,7 @@ async function retention(dry) {
 
 $("login-form").addEventListener("submit", async e => {
   e.preventDefault(); $("login-error").textContent = "";
-  try { const r = await fetch(appUrl("/api/login"), {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:$("password").value})}); if(!r.ok) throw new Error("パスワードが違います"); const d=await r.json(); csrfToken=d.csrf_token; $("login-dialog").close(); await loadManage(); await refresh(); }
+  try { const r = await fetch(appUrl("/api/login"), {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:$("password").value})}); if(r.status===401) throw new Error("パスワードが違います"); if(!r.ok) throw new Error(`ログイン処理に失敗しました (HTTP ${r.status})`); const d=await r.json(); csrfToken=d.csrf_token; $("login-dialog").close(); await loadManage(); await refresh(); }
   catch(err) { $("login-error").textContent=err.message; }
 });
 $("search").onclick = () => refresh().catch(e=>alert(e.message));

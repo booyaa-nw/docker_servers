@@ -124,7 +124,7 @@ async def index() -> str:
 
 
 @app.post("/api/login")
-async def login(body: LoginBody) -> JSONResponse:
+async def login(body: LoginBody, request: Request) -> JSONResponse:
     candidate = hashlib.scrypt(body.password.encode("utf-8"), salt=hashlib.sha256(SECRET.encode()).digest()[:16], n=2**14, r=8, p=1)
     if not secrets.compare_digest(candidate, PASSWORD_HASH):
         raise HTTPException(401, "Invalid password")
