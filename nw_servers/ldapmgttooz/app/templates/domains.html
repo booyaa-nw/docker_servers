@@ -12,14 +12,14 @@
     <tr>
       <td><strong>{{ d.name }}</strong><br><code>{{ d.base_dn }}</code></td>
       <td>{% if d.active %}<span class="tag">使用中</span>{% else %}
-        <form method="post" action="/domains/switch" data-confirm="LDAPとRADIUSをこのドメインへ切り替えますか？"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
+        <form method="post" action="{{ base_path }}/domains/switch" data-confirm="LDAPとRADIUSをこのドメインへ切り替えますか？"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
           <input type="hidden" name="domain" value="{{ d.name }}">
           <input type="hidden" name="current_base" value="{{ base_dn }}">
           <button>切り替える</button>
         </form>
       {% endif %}</td>
       <td>{% if not d.active %}
-        <form method="post" action="/domains/delete" class="inline-form" data-confirm="ドメインを管理一覧から削除しますか？データは保持します。"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
+        <form method="post" action="{{ base_path }}/domains/delete" class="inline-form" data-confirm="ドメインを管理一覧から削除しますか？データは保持します。"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
           <input type="hidden" name="domain" value="{{ d.name }}">
           <input name="confirmation" aria-label="削除確認のドメイン名" placeholder="{{ d.name }}" required>
           <button class="danger">削除</button>
@@ -30,7 +30,7 @@
     </tbody>
   </table>
 </div>
-<form method="post" action="/domains/create" class="card"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
+<form method="post" action="{{ base_path }}/domains/create" class="card"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
   <h2>ドメインの新規作成</h2>
   <p>空のドメインを登録します。初回の切り替え時にOUとFreeRADIUS用の検索アカウントを作成します。</p>
   <label>ドメイン名<input name="domain" placeholder="example.test" required></label>

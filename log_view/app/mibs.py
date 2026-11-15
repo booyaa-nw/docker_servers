@@ -25,7 +25,7 @@ def mib_context():
                 mib_builder.load_modules(module)
             except Exception:
                 continue
-        return rfc1902, mib_view
+        return mib_builder, rfc1902, mib_view
     except Exception as exc:
         log.debug("MIB setup failed: %s", exc)
         return None
@@ -39,7 +39,7 @@ def resolve_oid(oid: str) -> str | None:
     if not context:
         return None
     try:
-        rfc1902, mib_view = context
+        _, rfc1902, mib_view = context
         identity = rfc1902.ObjectIdentity(tuple(int(part) for part in oid.strip(".").split(".")))
         identity.resolve_with_mib(mib_view)
         name = identity.prettyPrint()
@@ -47,3 +47,25 @@ def resolve_oid(oid: str) -> str | None:
     except Exception as exc:
         log.debug("MIB resolution failed for %s: %s", oid, exc)
         return None
+
+
+def validate_module(module: str) -> None:
+    # Compile the newly uploaded source explicitly. The cached context can
+    # otherwise resolve an older compiled module and hide an invalid upload.
+    invalidate_module(module)
+    context = mib_context()
+    if not context:
+        raise ValueError("MIB compiler could not be initialized")
+    builder, _, _ = context
+    try:
+        builder.load_modules(module)
+    except Exception as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def invalidate_module(module: str) -> None:
+    resolve_oid.cache_clear()
+    mib_context.cache_clear()
+    for compiled in MIB_CACHE.glob(f"{module}.*"):
+        if compiled.is_file():
+            compiled.unlink(missing_ok=True)

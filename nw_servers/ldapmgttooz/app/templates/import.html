@@ -3,7 +3,7 @@
 {% block content %}
 <h1>CSV一括登録</h1>
 <div class="grid2">
-<form method="post" action="/import" enctype="multipart/form-data" class="card"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
+<form method="post" action="{{ base_path }}/import" enctype="multipart/form-data" class="card"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
   <h2>ファイルを選択</h2>
   <label>CSVファイル（UTF-8 / Shift_JIS）<input type="file" name="file" accept=".csv,text/csv" required></label>
   <fieldset>
@@ -19,7 +19,7 @@
 </form>
 <div class="card">
   <h2>CSVの形式</h2>
-  <p><a class="button" href="/import/template.csv">テンプレートをダウンロード</a> <a class="button" href="/export/users.csv">現在のユーザを書き出し</a></p>
+  <p><a class="button" href="{{ base_path }}/import/template.csv">テンプレートをダウンロード</a> <a class="button" href="{{ base_path }}/export/users.csv">現在のユーザを書き出し</a></p>
   <table class="list small">
     <tr><th>username</th><td>ログイン用ユーザ名（必須）</td></tr>
     <tr><th>last_name / first_name</th><td>姓 / 名</td></tr>

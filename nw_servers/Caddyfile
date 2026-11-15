@@ -1,0 +1,23 @@
+{$PUBLIC_DOMAIN} {
+	encode zstd gzip
+
+	redir /ldap /ldap/ 308
+	redir /log-view /log-view/ 308
+
+	handle /ldap/* {
+		reverse_proxy ldapmgttooz:8080 {
+			header_up X-Forwarded-Prefix /ldap
+		}
+	}
+
+	handle /log-view/* {
+		reverse_proxy log-view:8080 {
+			header_up X-Forwarded-Prefix /log-view
+		}
+	}
+
+	handle {
+		root * /srv
+		file_server
+	}
+}

@@ -4,26 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}LDAPユーザ管理{% endblock %} - LdapMgtTooz</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="{{ base_path }}/static/style.css">
 </head>
 <body>
 {% if request.session.get('auth') %}
 <header class="top">
-  <div class="brand">LdapMgtTooz<span class="domain">{{ domain }}</span></div>
+  <div class="brand"><a href="/" class="portal-link">NW Lab</a><span class="domain">{{ domain }}</span></div>
   <nav>
-    <a href="/users" class="{{ 'on' if nav=='users' }}">ユーザ</a>
-    <a href="/groups" class="{{ 'on' if nav=='groups' }}">グループ</a>
-    <a href="/vlan" class="{{ 'on' if nav=='vlan' }}">Dynamic VLAN</a>
-    <a href="/import" class="{{ 'on' if nav=='import' }}">CSV一括登録</a>
-    <a href="/domains" class="{{ 'on' if nav=='domains' }}">ドメイン</a>
-    <a href="/settings" class="{{ 'on' if nav=='settings' }}">管理設定</a>
+    <a href="{{ base_path }}/users" class="{{ 'on' if nav=='users' }}">ユーザ</a>
+    <a href="{{ base_path }}/groups" class="{{ 'on' if nav=='groups' }}">グループ</a>
+    <a href="{{ base_path }}/vlan" class="{{ 'on' if nav=='vlan' }}">Dynamic VLAN</a>
+    <a href="{{ base_path }}/import" class="{{ 'on' if nav=='import' }}">CSV一括登録</a>
+    <a href="{{ base_path }}/domains" class="{{ 'on' if nav=='domains' }}">ドメイン</a>
+    <a href="{{ base_path }}/settings" class="{{ 'on' if nav=='settings' }}">管理設定</a>
   </nav>
-  <form method="post" action="/logout"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}"><button class="link">ログアウト</button></form>
+  <form method="post" action="{{ base_path }}/logout"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}"><button class="link">ログアウト</button></form>
 </header>
 {% if state.pending and not state.errors %}
 <div class="banner pending" id="pending">設定を反映しています…（LDAP: {{ '反映中' if state.ldap_pending else '完了' }} / RADIUS: {{ '反映中' if state.radius_pending else '完了' }}）</div>
 <script>
-  (function poll(){ setTimeout(function(){ fetch('/api/state').then(r=>r.json()).then(s=>{ if(s.pending && !s.errors.length){poll();} else {location.reload();} }).catch(poll); }, 2000); })();
+  (function poll(){ setTimeout(function(){ fetch('{{ base_path }}/api/state').then(r=>r.json()).then(s=>{ if(s.pending && !s.errors.length){poll();} else {location.reload();} }).catch(poll); }, 2000); })();
 </script>
 {% endif %}
 {% for e in state.errors %}<div class="banner error">{{ e }}</div>{% endfor %}

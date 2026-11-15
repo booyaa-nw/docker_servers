@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ '編集: ' ~ group.cn if group else 'グループ追加' }}{% endblock %}
 {% block content %}
-<p><a href="/groups">← グループ一覧</a></p>
+<p><a href="{{ base_path }}/groups">← グループ一覧</a></p>
 <h1>{{ 'グループ編集: ' ~ group.cn if group else 'グループ追加' }}</h1>
 <div class="grid2">
 <form method="post" action="{{ '/groups/' ~ (group.cn|urlencode) if group else '/groups/new' }}" class="card"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
@@ -27,7 +27,7 @@
 </form>
 {% if group %}
 <div>
-  <form method="post" action="/groups/{{ group.cn|urlencode }}/delete" class="card danger" data-confirm="グループ「{{ group.cn }}」を削除します。よろしいですか？"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
+  <form method="post" action="{{ base_path }}/groups/{{ group.cn|urlencode }}/delete" class="card danger" data-confirm="グループ「{{ group.cn }}」を削除します。よろしいですか？"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
     <h2>削除</h2>
     <p class="small muted">所属ユーザ自体は削除されません。</p>
     <button class="danger">グループを削除</button>

@@ -1,84 +1,95 @@
-# nwlab LDAP / RADIUS / ユーザ管理Web UI
+# NW Lab 統合環境
 
-| コンテナ | 役割 | ポート |
+Raspberry Pi 4上のDocker Composeで、LDAP/RADIUS、LdapMgtTooz、NW Log View、Mailpit、Caddyポータルをまとめて起動します。ブラウザーからはCaddyを入口にし、`https://<PUBLIC_DOMAIN>/` のポータルから各ツールへ移動します。
+
+## サービスとポート
+
+| サービス | 用途 | ホスト公開ポート |
 |---|---|---|
-| nw-openldap | LDAP（ユーザ・グループ・検索用アカウント） | 389/tcp |
-| nw-freeradius | RADIUS（PAP / MS-CHAPv2 / PEAP / EAP-TTLS、Dynamic VLAN） | 1812,1813/udp |
-| nw-ldapmgttooz | ユーザ管理Web UI（Python/FastAPI） | 8080/tcp |
+| caddy | HTTPSポータル、LDAP UIとログ画面のリバースプロキシ | 80/tcp, 443/tcp, 443/udp |
+| openldap | LDAP | 389/tcp |
+| freeradius | RADIUS認証・アカウンティング | 1812/udp, 1813/udp |
+| log-view | Syslog/SNMP Trap収集、統合表示、Mailpit API同期 | 514/tcp+udp, 162/tcp+udp |
+| mailpit | SMTP受信（STARTTLS） | 1025/tcp |
+| mailpit-smtps | SMTP暗黙TLS | 465/tcp |
 
-3つのコンテナは `./ldap-shared/` を共有します。
+LdapMgtTooz（`/ldap/`）、Log View（`/log-view/`）、Mailpitの管理Web/APIはホストへ直接公開せず、Caddyまたは内部Dockerネットワークから利用します。
 
-- `settings.json` … ベースDN、admin管理者、FreeRADIUS検索用アカウント（Web UIの「管理設定」で変更）
-- `freeradius/nwlab_vlan` … Dynamic VLAN ポリシー（Web UIが自動生成）
-- `domains.json` … 各ドメインの設定と退避情報
-- `status-*.json` … 各コンテナの反映状況
+## 初回準備
 
-設定が変わると openldap / freeradius が自動で再起動します（FreeRADIUSは `-C` で検証してから再起動）。
+実際にDNS登録した名前を `PUBLIC_DOMAIN` に指定してください。外部から使う場合、DNSをPiへ向け、ルーター/FirewallでTCP 80/443をPiへ転送します。Caddyが公開CA証明書を取得・更新します。閉じたLAN内だけで使う場合はCaddyのローカルCAを使えますが、クライアント側でそのCAを信頼する必要があります。
 
-## 更新・起動
+```sh
+cp .env.example .env
+```
 
-同じ Compose プロジェクトと既存の `openldap/data`、`ldap-shared` を使ってください。
-旧 Web UI のコンテナがある場合は、名前とポートを確認し、そのコンテナだけを停止・削除してから起動します。
+`.env` の全ての `ChangeMe` と `replace-with` を強い秘密値に変更し、`PUBLIC_DOMAIN` と `PI_IP` も環境に合わせます。Log Viewの署名鍵は `openssl rand -hex 32` で生成できます。
+
+Mailpitは1025/tcpでSTARTTLSを提供し、465/tcpでは暗黙TLSを提供します。初回起動前に証明書を配置します（自己署名例。クライアントにCA/証明書を信頼させるか、ラボのCA発行証明書へ置き換えてください）。
+
+```sh
+mkdir -p secrets/mailpit ../log_view/mailpit-data ../log_view/data ../log_view/mibs
+openssl req -x509 -newkey rsa:3072 -nodes \
+  -keyout secrets/mailpit/tls.key -out secrets/mailpit/tls.crt -days 825 \
+  -subj "/CN=nwlab.example.invalid" \
+  -addext "subjectAltName=DNS:nwlab.example.invalid,IP:192.0.2.10"
+sudo chown -R 10001:10001 ../log_view/data ../log_view/mibs
+chmod 600 secrets/mailpit/tls.key
+```
+
+証明書コマンドのCN、DNS名、IPアドレスは `.env` に設定した実値へ置き換えます。PowerShellでは `New-Item -ItemType Directory -Force secrets/mailpit,../log_view/mailpit-data,../log_view/data,../log_view/mibs` を使えます。OpenSSLはWindowsまたはPiにインストールされたものを使ってください。
+
+証明書生成サービスは証明書がない場合だけ自己署名証明書を作成します。上記手順で証明書を置く場合は、そのファイルを維持して使います。鍵はGitへ追加されません。
+
+## 起動・更新
+
+```sh
+docker compose up -d --build
+docker compose ps
+docker compose logs -f caddy ldapmgttooz log-view mailpit
+```
+
+アクセス先は `https://<PUBLIC_DOMAIN>/`（ポータル）、`https://<PUBLIC_DOMAIN>/ldap/`（LDAP管理）、`https://<PUBLIC_DOMAIN>/log-view/`（ログ画面）です。Mailpitへメールを投入するSMTPクライアントはSTARTTLSで1025、または暗黙TLSで465を指定します。1025はSTARTTLSを広告しますが必須にはしていません。465のTLS終端からMailpitまでは内部Dockerネットワーク上のSMTPです。
+
+## データ、バックアップ、復元
+
+- LDAP: `openldap/data/` と `ldap-shared/` をセットで保全します。`ldap-shared/settings.json` と `domains.json` は認証情報を含みます。
+- ログ: `../log_view/data/` にSQLite DBとMIBコンパイルキャッシュ、`../log_view/mibs/` に登録MIBを保存します。Log Viewの保守画面からDBバックアップ/復元と保持期間に基づくログ削除ができます。
+- Mailpit: `../log_view/mailpit-data/` に受信メールを保存します（従来のLog View単独Composeと同じ場所です）。
+- TLS鍵: `secrets/mailpit/` に保管し、別の安全な場所にもバックアップします。
+
+一貫性のあるファイルバックアップは、対象サービスを停止してからコピーしてください。復元は同じパスへ戻し、所有者（Log View UID 10001）を確認して起動します。ログ保持期間は `.env` の `LOG_RETENTION_DAYS` で設定します。
+
+## 統合後の単独起動
+
+LDAP/RADIUSだけを更新する場合もこのComposeプロジェクトを使います。
 
 ```sh
 docker compose up -d --build openldap freeradius ldapmgttooz
-docker compose logs -f openldap freeradius ldapmgttooz
 ```
 
-初期ドメインは `asakusa.lab`（`dc=asakusa,dc=lab`）。既存の settings.json があれば、そのドメインを引き継ぎます。
-新規ドメインに切り替える場合は UI から作成して切り替えてください。既存データの DN は書き換えません。
+## Log View単独Composeからの移行
 
-## ドメイン管理
+従来の `docker/log_view/compose.yaml` を使っていた場合、先にそのディレクトリで `docker compose down` を実行して旧log-view/Mailpitコンテナを停止・削除します。`data/`、`mibs/`、`mailpit-data/` のバインドマウントデータはそのまま残ります。`down -v` は実行しないでください。既存のLog View管理者パスワードと署名鍵を新しい `docker/nw_servers/.env` に引き継いでから、上記初回準備と起動を行います。
 
-LdapMgtTooz の「ドメイン」画面で、作成・一覧・切り替え・削除を操作できます。
+初期ドメインは `asakusa.lab`（`dc=asakusa,dc=lab`）です。既存の `ldap-shared/settings.json` があればそのドメイン設定を引き継ぎます。ドメイン作成・切り替え・削除はLdapMgtToozの「ドメイン」画面で操作します。一度に稼働するドメインは1つです。削除は台帳からの除外で、MDBと設定は退避扱いとして保持します。
 
-- 新規ドメインは、初回の切り替え時に OU と FreeRADIUS 用検索アカウントを作ります。ユーザとグループは空です。
-- 一度に稼働するのは 1 ドメインです。LDAP の反映後に FreeRADIUS が切り替わります。
-- ドメインごとに管理者・検索アカウント・MDB・Dynamic VLAN を保持します。再ログインには切替先の認証情報を使います。
-- 使用中のドメインは削除できません。削除は一覧からの除外で、MDB と設定は退避扱いとして保持します。同名で再作成しても旧データは再利用しません。
+## 注意事項
 
-バックアップには `ldap-shared/` と `openldap/data/` の両方が必要です。
-`domains.json` はドメイン台帳で、各ドメインの認証情報を含みます。
+- LdapMgtTooz、Log View、暗黙TLSプロキシのPythonイメージはPython 3.15+です。Pi 4ではARM64イメージをビルドします。
+- SyslogはRFC3164/RFC5424/FortiGate形式を個別に解析し、判定できない形式は本文をメッセージにします。パース済み項目と受信元データの両方を保持します。
+- SNMP TrapはOID、型付き値、送信元、raw BERを保存します。MIB管理画面からインポート・削除でき、MIBがない場合は数値OIDを表示します。raw BERにはSNMP communityが含まれる可能性があります。
+- Mailpit APIとWeb UIはDockerネットワーク内に限定し、Log ViewがAPIを2秒周期で同期します。
+- UDP syslog/Trapに到達保証はありません。機器側宛先、Firewall、Piの時刻同期も確認してください。
+- Mailpitの自己署名証明書を使うSMTPクライアントでは、クライアント側で証明書を信頼させる必要があります。
 
-## 使い方
+## 主なディレクトリ
 
-`http://<ホスト>:8080/` に admin管理者（初期値: `admin` / `.env` の `LDAP_ADMIN_PASSWORD`）でログイン。
+- `compose.yaml`: 統合Compose
+- `Caddyfile`, `portal/`: 公開入口とポータル
+- `ldapmgttooz/`, `openldap/`, `freeradius/`: LDAP/RADIUSツール群
+- `../log_view/`: Syslog/SNMP/Mailpit統合ビュー
+- `mailpit-certs/`, `mailpit-smtps/`: Mailpit証明書初期化と暗黙TLS入口
 
-- **ユーザ** … 追加・編集・名前変更・パスワード変更・削除。所属グループと個別VLAN
-- **グループ** … 追加・編集・名前変更・削除。VLAN ID（空欄可）と優先度
-- **Dynamic VLAN** … 優先度の一括編集、ユーザごとの実効VLAN、生成ポリシーの確認
-- **CSV一括登録** … UTF-8 / Shift_JIS。「確認のみ」で事前チェック可能。テンプレートと書き出しあり
-- **管理設定** … admin管理者の変更、検索用アカウント（ou=ServiceAccounts）の追加・パスワード変更・削除・FreeRADIUS用の切り替え
 
-### Dynamic VLAN の判定順
 
-1. ユーザ個別のVLAN（LDAP属性 `nwVlanId`）
-2. VLAN付きグループのうち、優先度（`nwVlanPriority`）が最も小さいもの
-3. どれにも該当しなければ VLAN属性なしで Access-Accept
-
-返却属性: `Tunnel-Type=VLAN(13)` / `Tunnel-Medium-Type=IEEE-802(6)` / `Tunnel-Private-Group-Id=<VLAN ID>`。
-PEAP / EAP-TTLS では内側の認証で判定し、外側の Access-Accept に載せます。
-
-## 注意
-
-- ユーザのパスワードは MS-CHAPv2 / PEAP のため LDAP に平文で保存します（検索用アカウントだけが読み取り可）。
-- `ldap-shared/settings.json` には admin と検索用アカウントのパスワードが平文で入ります（ラボ用途）。
-- ドメイン変更・admin変更・検索用アカウント切替の間（数秒〜十数秒）は認証が止まります。
-- NW機器側のLDAP設定（ベースDN、バインドDN/パスワード）は、ドメインや検索用アカウントを変えたら合わせて変更してください。
-- RADIUSのデバッグ: `.env` に `RADIUS_DEBUG=1` を書いて `docker compose up -d freeradius`。
-
-## ドメイン管理者パスワードの復旧
-
-Docker を操作できるホスト管理者が、旧パスワードなしで指定ドメインの LDAP 管理者パスワードを再設定できます。
-初回は `docker compose build ldapmgttooz` で復旧コマンドを含むイメージを作成してください。
-
-```sh
-docker compose stop ldapmgttooz
-docker compose run --rm --no-deps --entrypoint python ldapmgttooz -m app.reset_admin asakusa.lab
-docker compose up -d --no-deps ldapmgttooz
-```
-
-新パスワードを非表示で2回入力します。復旧処理の成否にかかわらず、最後の起動コマンドを実行してください。
-Web UI を停止するのは、復旧中に管理画面から同じ設定が変更されるのを防ぐためです。
-使用中のドメインでは LDAP が設定を再読み込みし、未使用のドメインでは次回切り替え時に反映します。
-ログイン名と FreeRADIUS の検索用パスワードは変わりません。

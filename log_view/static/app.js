@@ -1,4 +1,6 @@
 const $ = (id) => document.getElementById(id);
+const BASE_PATH = document.querySelector('meta[name="base-path"]')?.content || "";
+const appUrl = (path) => `${BASE_PATH}${path}`;
 let csrfToken = "";
 let lastFilter = {};
 let eventsCache = {syslog: [], snmp: [], mail: []};
@@ -6,7 +8,7 @@ let eventsCache = {syslog: [], snmp: [], mail: []};
 async function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
   if (csrfToken && ["POST", "PUT", "PATCH", "DELETE"].includes((options.method || "GET").toUpperCase())) headers.set("X-CSRF-Token", csrfToken);
-  const response = await fetch(path, {...options, headers});
+  const response = await fetch(appUrl(path), {...options, headers});
   if (response.status === 401) { showLogin(); throw new Error("ログインしてください"); }
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
@@ -114,6 +116,10 @@ async function downloadBackup() {
   const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href=url; a.download="log-view-backup.sqlite3"; a.click(); URL.revokeObjectURL(url);
   $("admin-result").textContent = `バックアップ SHA-256: ${response.headers.get("X-Content-SHA256") || ""}`;
 }
+async function loadMibs() {
+  const data = await (await api("/api/mibs")).json();
+  $("mib-items").innerHTML = data.files.length ? data.files.map(m => `<div class="item-row"><b>${esc(m.name)}</b><span>${(m.size/1024).toFixed(1)} KiB</span><button data-delete-mib="${esc(m.name)}">削除</button></div>`).join("") : '<div class="empty">MIBファイルがありません</div>';
+}
 async function retention(dry) {
   const info = await (await api("/api/admin/retention/default")).json();
   const result = await (await api(`/api/admin/retention?dry_run=${dry}`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({before:info.cutoff,confirm:!dry})})).json();
@@ -123,7 +129,7 @@ async function retention(dry) {
 
 $("login-form").addEventListener("submit", async e => {
   e.preventDefault(); $("login-error").textContent = "";
-  try { const r = await fetch("/api/login", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:$("password").value})}); if(!r.ok) throw new Error("パスワードが違います"); const d=await r.json(); csrfToken=d.csrf_token; $("login-dialog").close(); await loadManage(); await refresh(); }
+  try { const r = await fetch(appUrl("/api/login"), {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:$("password").value})}); if(!r.ok) throw new Error("パスワードが違います"); const d=await r.json(); csrfToken=d.csrf_token; $("login-dialog").close(); await loadManage(); await refresh(); }
   catch(err) { $("login-error").textContent=err.message; }
 });
 $("search").onclick = () => refresh().catch(e=>alert(e.message));
@@ -131,10 +137,12 @@ $("clear").onclick = () => { $("from").value=""; $("to").value=""; $("q").value=
 $("export").onclick = () => exportData().catch(e=>alert(e.message));
 $("manage-open").onclick = async () => { await loadManage(); $("manage-dialog").showModal(); };
 $("admin-open").onclick = async () => { const s=await (await api("/api/status")).json(); $("admin-info").textContent=`${s.event_count}件 · DB ${(s.db_bytes/1024/1024).toFixed(1)}MB`; $("admin-dialog").showModal(); };
+$("mib-open").onclick = async () => { await loadMibs(); $("mib-dialog").showModal(); };
 $("logout").onclick = async () => { await api("/api/logout",{method:"POST"}); csrfToken=""; showLogin(); };
 $("node-form").onsubmit = e => saveNode(e).catch(err=>alert(err.message));
 $("node-reset").onclick = resetNodeForm;
 $("group-form").onsubmit = async e => { e.preventDefault(); try { await api("/api/groups",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:$("group-name").value,description:$("group-description").value})}); e.target.reset(); await loadManage(); } catch(err){alert(err.message);} };
+$("mib-form").onsubmit = async e => { e.preventDefault(); const file=$("mib-file").files[0]; if(!file)return; const form=new FormData(); form.append("file",file); try { const data=await (await api("/api/mibs",{method:"POST",body:form})).json(); $("mib-result").textContent=`${data.name} を登録しました`; e.target.reset(); await loadMibs(); } catch(err) { $("mib-result").textContent=err.message; } };
 $("backup").onclick = () => downloadBackup().catch(e=>alert(e.message));
 $("retention-preview").onclick = () => retention(true).catch(e=>alert(e.message));
 $("retention-delete").onclick = () => { if(confirm("保持期間より古いイベントを削除します。先にバックアップしましたか？")) retention(false).catch(e=>alert(e.message)); };
@@ -144,6 +152,7 @@ document.body.addEventListener("click", async e => {
   const row=e.target.closest("[data-id]"); if(row){openDetail(row.dataset.id).catch(err=>alert(err.message));return;}
   const delNode=e.target.closest("[data-delete-node]"); if(delNode && confirm("ノードを削除しますか？過去イベントは残ります。")){await api(`/api/nodes/${delNode.dataset.deleteNode}`,{method:"DELETE"});await loadManage();await refresh();return;}
   const delGroup=e.target.closest("[data-delete-group]"); if(delGroup && confirm("グループを削除しますか？")){await api(`/api/groups/${delGroup.dataset.deleteGroup}`,{method:"DELETE"});await loadManage();return;}
+  const delMib=e.target.closest("[data-delete-mib]"); if(delMib && confirm(`${delMib.dataset.deleteMib} を削除しますか？`)){try{await api(`/api/mibs/${encodeURIComponent(delMib.dataset.deleteMib)}`,{method:"DELETE"});$("mib-result").textContent="MIBを削除しました";await loadMibs();}catch(err){alert(err.message);}return;}
   const edit=e.target.closest("[data-edit-node]"); if(edit){const n=(await (await api("/api/nodes")).json()).nodes.find(x=>x.id==edit.dataset.editNode);$("node-id").value=n.id;$("node-name").value=n.name;$("node-addresses").value=(n.addresses||"").split(",").join("\n");$("node-description").value=n.description;const gids=(n.group_ids||"").split(",");[...$("node-groups").options].forEach(o=>o.selected=gids.includes(o.value));return;}
   const ip=e.target.closest("[data-register-ip]"); if(ip){$("node-addresses").value=ip.dataset.registerIp;$("node-name").value=ip.dataset.registerIp;$("node-id").value="";return;}
 });

@@ -5,7 +5,7 @@
   <h1>グループ <span class="count">{{ groups|length }}</span></h1>
   <div class="actions">
     <input type="search" placeholder="絞り込み" data-filter="#groups tbody tr">
-    <a class="button primary" href="/groups/new">＋ グループ追加</a>
+    <a class="button primary" href="{{ base_path }}/groups/new">＋ グループ追加</a>
   </div>
 </div>
 <table id="groups" class="list">
@@ -13,12 +13,12 @@
   <tbody>
   {% for g in groups %}
   <tr>
-    <td><a href="/groups/{{ g.cn|urlencode }}"><strong>{{ g.cn }}</strong></a></td>
+    <td><a href="{{ base_path }}/groups/{{ g.cn|urlencode }}"><strong>{{ g.cn }}</strong></a></td>
     <td>{{ g.description }}</td>
     <td>{% if g.vlan %}<span class="vlan">{{ g.vlan }}</span>{% else %}<span class="muted small">なし</span>{% endif %}</td>
     <td>{{ g.priority if g.vlan else '' }}</td>
     <td>{{ g.members|length }} 人 <span class="muted small">{{ g.members[:5]|join(', ') }}{{ ' …' if g.members|length > 5 }}</span></td>
-    <td class="right"><a class="button small" href="/groups/{{ g.cn|urlencode }}">編集</a></td>
+    <td class="right"><a class="button small" href="{{ base_path }}/groups/{{ g.cn|urlencode }}">編集</a></td>
   </tr>
   {% else %}
   <tr><td colspan="6" class="empty">グループがありません</td></tr>

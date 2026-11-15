@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ '編集: ' ~ user.uid if user else 'ユーザ追加' }}{% endblock %}
 {% block content %}
-<p><a href="/users">← ユーザ一覧</a></p>
+<p><a href="{{ base_path }}/users">← ユーザ一覧</a></p>
 <h1>{{ 'ユーザ編集: ' ~ user.uid if user else 'ユーザ追加' }}</h1>
 <div class="grid2">
 <form method="post" action="{{ '/users/' ~ (user.uid|urlencode) if user else '/users/new' }}" class="card"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
@@ -36,13 +36,13 @@
 
 {% if user %}
 <div>
-  <form method="post" action="/users/{{ user.uid|urlencode }}/password" class="card"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
+  <form method="post" action="{{ base_path }}/users/{{ user.uid|urlencode }}/password" class="card"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
     <h2>パスワード変更</h2>
     <label>新しいパスワード<input name="password" type="password" required autocomplete="new-password"></label>
     <label>新しいパスワード（確認）<input name="password2" type="password" required autocomplete="new-password"></label>
     <button>パスワードを変更</button>
   </form>
-  <form method="post" action="/users/{{ user.uid|urlencode }}/delete" class="card danger" data-confirm="ユーザ「{{ user.uid }}」を削除します。よろしいですか？"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
+  <form method="post" action="{{ base_path }}/users/{{ user.uid|urlencode }}/delete" class="card danger" data-confirm="ユーザ「{{ user.uid }}」を削除します。よろしいですか？"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}">
     <h2>削除</h2>
     <p class="small muted">所属グループからも外されます。元に戻せません。</p>
     <button class="danger">ユーザを削除</button>

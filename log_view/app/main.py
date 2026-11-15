@@ -33,6 +33,7 @@ SECRET = os.getenv("LOG_VIEW_SECRET_KEY", "")
 if not PASSWORD or not SECRET:
     raise RuntimeError("LOG_VIEW_ADMIN_PASSWORD and LOG_VIEW_SECRET_KEY are required")
 PASSWORD_HASH = hashlib.scrypt(PASSWORD.encode("utf-8"), salt=hashlib.sha256(SECRET.encode()).digest()[:16], n=2**14, r=8, p=1)
+BASE_PATH = os.getenv("APP_BASE_PATH", "").rstrip("/")
 serializer = URLSafeTimedSerializer(SECRET, salt="log-view-session")
 sessions: dict[str, str] = {}
 csrf_by_session: dict[str, str] = {}
@@ -58,6 +59,17 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="NW Log View", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def strip_base_path(request: Request, call_next):
+    path = request.scope["path"]
+    if BASE_PATH and (path == BASE_PATH or path.startswith(f"{BASE_PATH}/")):
+        request.scope["path"] = path[len(BASE_PATH):] or "/"
+        request.scope["raw_path"] = request.scope["raw_path"][len(BASE_PATH.encode("ascii")): ] or b"/"
+    return await call_next(request)
+
+
 app.mount("/static", StaticFiles(directory="/app/static"), name="static")
 
 
@@ -108,7 +120,7 @@ class DeleteBody(BaseModel):
 
 @app.get("/", response_class=HTMLResponse)
 async def index() -> str:
-    return Path("/app/static/index.html").read_text(encoding="utf-8")
+    return Path("/app/static/index.html").read_text(encoding="utf-8").replace("__BASE_PATH__", BASE_PATH)
 
 
 @app.post("/api/login")
@@ -120,7 +132,8 @@ async def login(body: LoginBody) -> JSONResponse:
     sessions[sid] = "admin"
     csrf_by_session[sid] = csrf_token
     response = JSONResponse({"ok": True, "csrf_token": csrf_token})
-    response.set_cookie("lv_session", serializer.dumps(sid), httponly=True, samesite="strict", max_age=43200)
+    response.set_cookie("lv_session", serializer.dumps(sid), httponly=True, samesite="strict", secure=True,
+                        path=f"{BASE_PATH}/" if BASE_PATH else "/", max_age=43200)
     return response
 
 
@@ -134,7 +147,7 @@ async def logout(sid: str = Depends(csrf)) -> JSONResponse:
     sessions.pop(sid, None)
     csrf_by_session.pop(sid, None)
     response = JSONResponse({"ok": True})
-    response.delete_cookie("lv_session")
+    response.delete_cookie("lv_session", path=f"{BASE_PATH}/" if BASE_PATH else "/")
     return response
 
 
@@ -333,6 +346,67 @@ async def status(_: str = Depends(authorized)) -> dict[str, Any]:
     return {"event_count": count, "latest_event_at": latest, "db_bytes": db_size,
             "mailpit_configured": bool(os.getenv("MAILPIT_API_URL")), "mailpit_last_success": mailpit_status.get("last_success"),
             "mailpit_error": mailpit_status.get("last_error"), "poll_seconds": float(os.getenv("MAILPIT_POLL_SECONDS", "2"))}
+
+
+@app.get("/api/mibs")
+async def list_mibs(_: str = Depends(authorized)) -> dict[str, Any]:
+    mib_dir = Path(os.getenv("LOG_VIEW_MIB_DIR", "/mibs"))
+    mib_dir.mkdir(parents=True, exist_ok=True)
+    allowed = {".mib", ".txt", ".my"}
+    files = [{"name": path.name, "size": path.stat().st_size}
+             for path in sorted(mib_dir.iterdir())
+             if path.is_file() and not path.is_symlink() and path.suffix.lower() in allowed]
+    return {"files": files}
+
+
+@app.post("/api/mibs")
+async def import_mib(file: UploadFile = File(...), _: str = Depends(csrf)) -> dict[str, Any]:
+    mib_dir = Path(os.getenv("LOG_VIEW_MIB_DIR", "/mibs"))
+    mib_dir.mkdir(parents=True, exist_ok=True)
+    filename = Path(file.filename or "").name
+    if filename != (file.filename or "") or Path(filename).suffix.lower() not in {".mib", ".txt", ".my"}:
+        raise HTTPException(400, "Use an ASN.1 MIB file with .mib, .txt, or .my extension")
+    content = await file.read(5 * 1024 * 1024 + 1)
+    if not content or len(content) > 5 * 1024 * 1024:
+        raise HTTPException(413, "MIB file must be between 1 byte and 5 MiB")
+    destination = mib_dir / filename
+    previous = destination.read_bytes() if destination.exists() else None
+    destination.write_bytes(content)
+    module = destination.stem
+    try:
+        from .mibs import invalidate_module, validate_module
+        invalidate_module(module)
+        validate_module(module)
+    except Exception as exc:
+        if previous is None:
+            destination.unlink(missing_ok=True)
+        else:
+            destination.write_bytes(previous)
+        try:
+            from .mibs import invalidate_module
+            invalidate_module(module)
+        except Exception:
+            pass
+        raise HTTPException(400, f"MIB import/compile failed: {exc}") from exc
+    return {"ok": True, "name": filename, "size": len(content)}
+
+
+@app.delete("/api/mibs/{filename}")
+async def delete_mib(filename: str, _: str = Depends(csrf)) -> dict[str, bool]:
+    mib_dir = Path(os.getenv("LOG_VIEW_MIB_DIR", "/mibs"))
+    safe_name = Path(filename).name
+    path = mib_dir / safe_name
+    if safe_name != filename or path.suffix.lower() not in {".mib", ".txt", ".my"}:
+        raise HTTPException(400, "Invalid MIB filename")
+    if not path.is_file() or path.is_symlink():
+        raise HTTPException(404, "MIB file not found")
+    path.unlink()
+    try:
+        from .mibs import invalidate_module
+        invalidate_module(path.stem)
+    except Exception as exc:
+        log.warning("failed to invalidate compiled MIB %s: %s", path.stem, exc)
+    return {"ok": True}
 
 
 def _export_rows(filters: dict[str, Any], include_raw: bool) -> list[dict[str, Any]]:

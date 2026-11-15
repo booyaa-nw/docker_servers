@@ -1,0 +1,5 @@
+data/
+mibs/
+mailpit-data/
+__pycache__/
+*.py[cod]

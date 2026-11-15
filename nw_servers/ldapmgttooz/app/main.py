@@ -1,6 +1,7 @@
 """LdapMgtTooz: NW機器 RADIUS 認証用 LDAP 管理 Web UI"""
 import asyncio
 import hmac
+import os
 import secrets
 from pathlib import Path
 
@@ -15,11 +16,14 @@ from . import config, csvio, domain, radiuspolicy
 from .directory import Directory, DirectoryError, check_name
 
 HERE = Path(__file__).parent
+APP_PREFIX = os.getenv("APP_BASE_PATH", "").rstrip("/")
 app = FastAPI(title="LdapMgtTooz", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(SessionMiddleware, secret_key=config.session_secret(), same_site="strict",
-                   max_age=8 * 3600, session_cookie="nwldapmgttooz")
+                   max_age=8 * 3600, session_cookie="nwldapmgttooz",
+                   path=f"{APP_PREFIX}/" if APP_PREFIX else "/", https_only=bool(APP_PREFIX))
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=HERE / "templates")
+templates.env.globals["base_path"] = APP_PREFIX
 
 
 # Serialize UI operations across domain changes, including in-flight LDAP writes.
@@ -28,7 +32,11 @@ requests_lock = asyncio.Lock()
 
 @app.middleware("http")
 async def serialize_ui(request, call_next):
-    if request.url.path.startswith("/static/"):
+    path = request.scope["path"]
+    if APP_PREFIX and (path == APP_PREFIX or path.startswith(f"{APP_PREFIX}/")):
+        request.scope["path"] = path[len(APP_PREFIX):] or "/"
+        request.scope["raw_path"] = request.scope["raw_path"][len(APP_PREFIX.encode("ascii")): ] or b"/"
+    if request.scope["path"].startswith("/static/"):
         return await call_next(request)
     async with requests_lock:
         return await call_next(request)
@@ -40,7 +48,7 @@ class LoginRequired(Exception):
 
 @app.exception_handler(LoginRequired)
 async def _login_required(request: Request, exc):
-    return RedirectResponse("/login", status_code=303)
+    return back("/login")
 
 
 @app.exception_handler(config.SettingsMissing)
@@ -59,6 +67,8 @@ def flash(request: Request, message: str, kind: str = "ok"):
 
 
 def back(url: str):
+    if APP_PREFIX and url.startswith("/") and not url.startswith(f"{APP_PREFIX}/"):
+        url = f"{APP_PREFIX}{url}"
     return RedirectResponse(url, status_code=303)
 
 

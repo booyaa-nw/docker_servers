@@ -47,12 +47,131 @@ services:
     image: nwlab/ldapmgttooz:local
     container_name: nw-ldapmgttooz
     restart: unless-stopped
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     environment:
       TZ: Asia/Tokyo
       LDAP_URI: ldap://nw-openldap:389
+      APP_BASE_PATH: /ldap
     volumes:
       - ./ldap-shared:/shared
     depends_on:
       - openldap
+
+  mailpit-certs:
+    build: ./mailpit-certs
+    image: nwlab/mailpit-certs:local
+    container_name: nw-mailpit-certs
+    environment:
+      TLS_CERT_CN: "${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN in .env}"
+      TLS_CERT_SAN: "DNS:${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN in .env},IP:${PI_IP:-127.0.0.1}"
+    volumes:
+      - ./secrets/mailpit:/certs
+    restart: "no"
+
+  mailpit:
+    image: ghcr.io/axllent/mailpit:v1.33.1
+    container_name: nw-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025/tcp"
+    expose:
+      - "8025"
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_SMTP_BIND_ADDR: 0.0.0.0:1025
+      MP_SMTP_TLS_CERT: /certs/tls.crt
+      MP_SMTP_TLS_KEY: /certs/tls.key
+      MP_ALLOWED_HOSTS: mailpit:8025,localhost:8025
+      TZ: Asia/Tokyo
+    volumes:
+      - ../log_view/mailpit-data:/data
+      - ./secrets/mailpit:/certs:ro
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    depends_on:
+      mailpit-certs:
+        condition: service_completed_successfully
+
+  mailpit-smtps:
+    build: ./mailpit-smtps
+    image: nwlab/mailpit-smtps:local
+    container_name: nw-mailpit-smtps
+    restart: unless-stopped
+    ports:
+      - "465:1465/tcp"
+    environment:
+      SMTP_TLS_CERT: /certs/tls.crt
+      SMTP_TLS_KEY: /certs/tls.key
+      SMTP_BACKEND: mailpit:1025
+    volumes:
+      - ./secrets/mailpit:/certs:ro
+    depends_on:
+      mailpit-certs:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
+
+  log-view:
+    build: ../log_view
+    image: nwlab/log-view:local
+    container_name: nw-log-view
+    restart: unless-stopped
+    expose:
+      - "8080"
+    ports:
+      - "514:1514/udp"
+      - "514:1514/tcp"
+      - "162:1162/udp"
+      - "162:1162/tcp"
+    environment:
+      TZ: Asia/Tokyo
+      APP_BASE_PATH: /log-view
+      LOG_VIEW_ADMIN_PASSWORD: "${LOG_VIEW_ADMIN_PASSWORD:?Set LOG_VIEW_ADMIN_PASSWORD in .env}"
+      LOG_VIEW_SECRET_KEY: "${LOG_VIEW_SECRET_KEY:?Set LOG_VIEW_SECRET_KEY in .env}"
+      LOG_VIEW_DB: /data/log_view.sqlite3
+      LOG_VIEW_MIB_DIR: /mibs
+      LOG_VIEW_MIB_CACHE: /data/mibs-compiled
+      MAILPIT_API_URL: http://mailpit:8025
+      MAILPIT_USERNAME: "${MAILPIT_USERNAME:-}"
+      MAILPIT_PASSWORD: "${MAILPIT_PASSWORD:-}"
+      MAILPIT_POLL_SECONDS: "${MAILPIT_POLL_SECONDS:-2}"
+      LOG_RETENTION_DAYS: "${LOG_RETENTION_DAYS:-30}"
+    volumes:
+      - ../log_view/data:/data
+      - ../log_view/mibs:/mibs
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 512m
+    cpus: 2.0
+    depends_on:
+      mailpit:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: nw-caddy
+    restart: unless-stopped
+    environment:
+      PUBLIC_DOMAIN: "${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN in .env}"
+    ports:
+      - "80:80/tcp"
+      - "443:443/tcp"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./portal:/srv:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - ldapmgttooz
+      - log-view
+
+volumes:
+  caddy_data:
+  caddy_config:
