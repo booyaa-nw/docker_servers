@@ -132,7 +132,7 @@ async def login(body: LoginBody) -> JSONResponse:
     sessions[sid] = "admin"
     csrf_by_session[sid] = csrf_token
     response = JSONResponse({"ok": True, "csrf_token": csrf_token})
-    response.set_cookie("lv_session", serializer.dumps(sid), httponly=True, samesite="strict", secure=True,
+    response.set_cookie("lv_session", serializer.dumps(sid), httponly=True, samesite="strict", secure=request.url.scheme == "https",
                         path=f"{BASE_PATH}/" if BASE_PATH else "/", max_age=43200)
     return response
 

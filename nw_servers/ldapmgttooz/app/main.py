@@ -17,10 +17,11 @@ from .directory import Directory, DirectoryError, check_name
 
 HERE = Path(__file__).parent
 APP_PREFIX = os.getenv("APP_BASE_PATH", "").rstrip("/")
+COOKIE_SECURE = os.getenv("APP_COOKIE_SECURE", "true").lower() == "true"
 app = FastAPI(title="LdapMgtTooz", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(SessionMiddleware, secret_key=config.session_secret(), same_site="strict",
                    max_age=8 * 3600, session_cookie="nwldapmgttooz",
-                   path=f"{APP_PREFIX}/" if APP_PREFIX else "/", https_only=bool(APP_PREFIX))
+                   path=f"{APP_PREFIX}/" if APP_PREFIX else "/", https_only=COOKIE_SECURE)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=HERE / "templates")
 templates.env.globals["base_path"] = APP_PREFIX

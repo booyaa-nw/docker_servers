@@ -41,7 +41,7 @@ services:
     depends_on:
       - openldap
 
-  # LDAPユーザ管理 Web UI（http://<ホスト>:8080/）
+  # LDAPユーザ管理 Web UI（Caddy経由: /ldap/）
   ldapmgttooz:
     build: ./ldapmgttooz
     image: nwlab/ldapmgttooz:local
@@ -53,6 +53,7 @@ services:
       TZ: Asia/Tokyo
       LDAP_URI: ldap://nw-openldap:389
       APP_BASE_PATH: /ldap
+      APP_COOKIE_SECURE: "false"
     volumes:
       - ./ldap-shared:/shared
     depends_on:
@@ -63,8 +64,8 @@ services:
     image: nwlab/mailpit-certs:local
     container_name: nw-mailpit-certs
     environment:
-      TLS_CERT_CN: "${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN in .env}"
-      TLS_CERT_SAN: "DNS:${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN in .env},IP:${PI_IP:-127.0.0.1}"
+      TLS_CERT_CN: "${PUBLIC_DOMAIN:-nwlab.local}"
+      TLS_CERT_SAN: "DNS:${PUBLIC_DOMAIN:-nwlab.local},IP:${PI_IP:-127.0.0.1}"
     volumes:
       - ./secrets/mailpit:/certs
     restart: "no"
@@ -157,12 +158,8 @@ services:
     image: caddy:2-alpine
     container_name: nw-caddy
     restart: unless-stopped
-    environment:
-      PUBLIC_DOMAIN: "${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN in .env}"
     ports:
       - "80:80/tcp"
-      - "443:443/tcp"
-      - "443:443/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./portal:/srv:ro

@@ -1,4 +1,4 @@
-{$PUBLIC_DOMAIN} {
+:80 {
 	encode zstd gzip
 
 	redir /ldap /ldap/ 308

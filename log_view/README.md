@@ -11,7 +11,7 @@ docker compose up -d --build log-view
 docker compose logs -f log-view
 ```
 
-Web UIは `https://<PUBLIC_DOMAIN>/log-view/` です。受信ポートはホストの514/tcp+udp（Syslog）と162/tcp+udp（SNMP Trap）です。Mailpit APIは内部Composeネットワークで利用します。
+Web UIは `http://<PiのIP>/log-view/` です。受信ポートはホストの514/tcp+udp（Syslog）と162/tcp+udp（SNMP Trap）です。Mailpit APIは内部Composeネットワークで利用します。
 
 ## 機能
 
