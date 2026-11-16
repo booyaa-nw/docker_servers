@@ -10,7 +10,7 @@ Raspberry Pi 4上のDocker ComposeでLDAP/RADIUS、MailpitとNetRigポータル�
 | openldap | LDAPディレクトリ | 389/tcp |
 | freeradius | RADIUS認証・アカウンティング | 1812/udp, 1813/udp |
 | log-view | Syslog/SNMP Trap収集、イベント表示 | 514/tcp+udp, 162/tcp+udp |
-| mailpit | SMTP受信（STARTTLS） | 1025/tcp |
+| mailpit | SMTP受信（STARTTLS） | 25/tcp |
 | mailpit-smtps | SMTP暗黙TLS | 465/tcp |
 
 ## 初回準備
@@ -40,7 +40,21 @@ docker compose ps
 docker compose logs -f netrig caddy ldapmgttooz log-view mailpit
 ```
 
-ブラウザーで `http://<PiのIP>/` を開いてNetRigにサインインします。ポータルからLDAP管理またはログビューを選択します。SMTPクライアントはSTARTTLSで1025、または暗黙TLSで465を指定します。
+ブラウザーで `http://<PiのIP>/` を開いてNetRigにサインインします。ポータルからLDAP管理またはログビューを選択します。SMTPクライアントはSTARTTLSで25、または暗黙TLSで465を指定します。
+
+## 新しいディレクトリ構成への初回切り替え
+
+旧LDAP MDBを引き継がない場合は、Composeを停止して新しい `openldap/data/` を空にしてから起動します。この操作でLDAPディレクトリ内の既存データは削除され、環境変数から初期設定を作り直します。
+
+```sh
+docker compose down
+sudo find ./openldap/data -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+sudo install -d -o 10001 -g 10001 plugins/log_view/data plugins/log_view/config/mibs
+sudo chown -R 10001:10001 plugins/log_view/data plugins/log_view/config/mibs
+docker compose up -d --build
+```
+
+OpenLDAPの初期化完了後にLDAP管理画面を開きます。ログビューのDB起動エラーが出る場合は、上記のUID 10001所有権と書き込み権限を確認してください。
 
 LDAP/RADIUSだけを更新する場合も同じComposeプロジェクトを使います。
 

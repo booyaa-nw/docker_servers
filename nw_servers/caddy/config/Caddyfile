@@ -21,9 +21,9 @@
 			forward_auth netrig:8080 {
 				uri /auth/check
 				copy_headers X-NetRig-User X-NetRig-Signature
-				handle_response {
-					@unauth status 401
-					redir @unauth /login?return={http.request.uri.path} 303
+				@unauth status 401
+				handle_response @unauth {
+					redir /login?return={http.request.uri.path} 303
 				}
 			}
 			reverse_proxy ldapmgttooz:8080 {
@@ -39,9 +39,9 @@
 			forward_auth netrig:8080 {
 				uri /auth/check
 				copy_headers X-NetRig-User X-NetRig-Signature
-				handle_response {
-					@unauth status 401
-					redir @unauth /login?return={http.request.uri.path} 303
+				@unauth status 401
+				handle_response @unauth {
+					redir /login?return={http.request.uri.path} 303
 				}
 			}
 			reverse_proxy log-view:8080 {
