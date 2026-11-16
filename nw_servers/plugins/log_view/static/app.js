@@ -18,7 +18,6 @@ async function api(path, options = {}) {
   }
   return response;
 }
-function showLogin() { location.href = `/login?return=${encodeURIComponent(location.pathname + location.search)}`; }
 function utcDate(value) { return value ? new Date(value).toISOString().replace("Z", "+00:00") : ""; }
 function queryFilters(kinds) {
   const p = new URLSearchParams();
@@ -158,7 +157,7 @@ document.body.addEventListener("click", async e => {
   const localInput = d => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   $("from").value = localInput(before); $("to").value = localInput(now);
   try { csrfToken=(await (await api("/api/session")).json()).csrf_token; $("login-dialog").close(); await loadManage(); await refresh(); }
-  catch { showLogin(); }
+  catch (err) { $("status").textContent = `読み込みに失敗しました: ${err.message}`; }
   setInterval(() => { if (csrfToken) refresh().catch(e => { $("status").textContent=e.message; }); }, 2500);
 })();
 
