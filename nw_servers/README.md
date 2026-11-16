@@ -54,7 +54,7 @@ sudo chown -R "$(id -u):$(id -g)" plugins/log_view/data plugins/log_view/config/
 docker compose up -d --build
 ```
 
-OpenLDAPの初期化完了後にLDAP管理画面を開きます。ログビューのDB起動エラーが出る場合は、上記のUID 10001所有権と書き込み権限を確認してください。
+OpenLDAPの初期化完了後にLDAP管理画面を開きます。ログビューの起動ログにMIBディレクトリの権限エラーが出る場合は、`.env`の`LOG_VIEW_UID` / `LOG_VIEW_GID`と、上記ディレクトリの所有者が一致していることを確認してください。
 
 LDAP/RADIUSだけを更新する場合も同じComposeプロジェクトを使います。
 

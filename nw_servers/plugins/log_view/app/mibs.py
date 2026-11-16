@@ -16,7 +16,12 @@ def mib_context():
         from pysnmp.smi import builder, compiler, rfc1902, view
         MIB_CACHE.mkdir(parents=True, exist_ok=True)
         mib_builder = builder.MibBuilder()
-        compiler.add_mib_compiler(mib_builder, sources=[f"file://{MIB_DIR}"], destination=str(MIB_CACHE))
+        compiler.add_mib_compiler(
+            mib_builder,
+            sources=[f"file://{MIB_DIR}"],
+            destination=str(MIB_CACHE),
+            ifNotAdded=True,
+        )
         mib_view = view.MibViewController(mib_builder)
         modules = [p.stem for p in MIB_DIR.iterdir() if p.is_file() and p.suffix.lower() in {".mib", ".txt", ".my"}]
         modules.extend(["SNMPv2-MIB", "IF-MIB"])

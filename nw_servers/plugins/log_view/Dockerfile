@@ -22,7 +22,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY static ./static
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod 755 /usr/local/bin/docker-entrypoint.sh && mkdir -p /data /config/mibs
+RUN chmod 755 /usr/local/bin/docker-entrypoint.sh && mkdir -p /data /config/mibs /data/mibs-compiled
 
 EXPOSE 8080 1514/udp 1514/tcp 1162/udp 1162/tcp
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
