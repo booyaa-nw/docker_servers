@@ -9,7 +9,8 @@ async function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
   if (csrfToken && ["POST", "PUT", "PATCH", "DELETE"].includes((options.method || "GET").toUpperCase())) headers.set("X-CSRF-Token", csrfToken);
   const response = await fetch(appUrl(path), {...options, headers});
-  if (response.status === 401) { showLogin(); throw new Error("ログインしてください"); }
+  if (response.redirected && new URL(response.url).pathname === "/login") { location.href = response.url; throw new Error("NetRigへログインしてください"); }
+  if (response.status === 401) { location.href = `/login?return=${encodeURIComponent(location.pathname + location.search)}`; throw new Error("NetRigへログインしてください"); }
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
     try { message = (await response.json()).detail || message; } catch {}
@@ -17,7 +18,7 @@ async function api(path, options = {}) {
   }
   return response;
 }
-function showLogin() { const d = $("login-dialog"); if (!d.open) d.showModal(); }
+function showLogin() { location.href = `/login?return=${encodeURIComponent(location.pathname + location.search)}`; }
 function utcDate(value) { return value ? new Date(value).toISOString().replace("Z", "+00:00") : ""; }
 function queryFilters(kinds) {
   const p = new URLSearchParams();
@@ -127,18 +128,13 @@ async function retention(dry) {
   await refresh();
 }
 
-$("login-form").addEventListener("submit", async e => {
-  e.preventDefault(); $("login-error").textContent = "";
-  try { const r = await fetch(appUrl("/api/login"), {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:$("password").value})}); if(r.status===401) throw new Error("パスワードが違います"); if(!r.ok) throw new Error(`ログイン処理に失敗しました (HTTP ${r.status})`); const d=await r.json(); csrfToken=d.csrf_token; $("login-dialog").close(); await loadManage(); await refresh(); }
-  catch(err) { $("login-error").textContent=err.message; }
-});
 $("search").onclick = () => refresh().catch(e=>alert(e.message));
 $("clear").onclick = () => { $("from").value=""; $("to").value=""; $("q").value=""; [...$("nodes").options].forEach(o=>o.selected=false); refresh(); };
 $("export").onclick = () => exportData().catch(e=>alert(e.message));
 $("manage-open").onclick = async () => { await loadManage(); $("manage-dialog").showModal(); };
 $("admin-open").onclick = async () => { const s=await (await api("/api/status")).json(); $("admin-info").textContent=`${s.event_count}件 · DB ${(s.db_bytes/1024/1024).toFixed(1)}MB`; $("admin-dialog").showModal(); };
 $("mib-open").onclick = async () => { await loadMibs(); $("mib-dialog").showModal(); };
-$("logout").onclick = async () => { await api("/api/logout",{method:"POST"}); csrfToken=""; showLogin(); };
+$("logout").onclick = () => { location.href = "/logout"; };
 $("node-form").onsubmit = e => saveNode(e).catch(err=>alert(err.message));
 $("node-reset").onclick = resetNodeForm;
 $("group-form").onsubmit = async e => { e.preventDefault(); try { await api("/api/groups",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:$("group-name").value,description:$("group-description").value})}); e.target.reset(); await loadManage(); } catch(err){alert(err.message);} };

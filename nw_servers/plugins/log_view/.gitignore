@@ -1,5 +1,4 @@
 data/
-mibs/
-mailpit-data/
+config/mibs/
 __pycache__/
 *.py[cod]

@@ -4,6 +4,7 @@ import asyncio
 import base64
 import csv
 import hashlib
+import hmac
 from email.utils import parsedate_to_datetime
 import io
 import json
@@ -19,7 +20,6 @@ from typing import Any
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from itsdangerous import BadSignature, URLSafeTimedSerializer
 from pydantic import BaseModel, Field
 
 from . import db as database
@@ -28,14 +28,10 @@ from .receivers import start_receivers
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 log = logging.getLogger(__name__)
-PASSWORD = os.getenv("LOG_VIEW_ADMIN_PASSWORD", "")
-SECRET = os.getenv("LOG_VIEW_SECRET_KEY", "")
-if not PASSWORD or not SECRET:
-    raise RuntimeError("LOG_VIEW_ADMIN_PASSWORD and LOG_VIEW_SECRET_KEY are required")
-PASSWORD_HASH = hashlib.scrypt(PASSWORD.encode("utf-8"), salt=hashlib.sha256(SECRET.encode()).digest()[:16], n=2**14, r=8, p=1)
+NETRIG_SECRET = os.getenv("NETRIG_SHARED_SECRET", "").encode()
+if not NETRIG_SECRET:
+    raise RuntimeError("NETRIG_SHARED_SECRET is required")
 BASE_PATH = os.getenv("APP_BASE_PATH", "").rstrip("/")
-serializer = URLSafeTimedSerializer(SECRET, salt="log-view-session")
-sessions: dict[str, str] = {}
 csrf_by_session: dict[str, str] = {}
 receiver_handles: list[Any] = []
 mail_stop: asyncio.Event | None = None
@@ -58,7 +54,7 @@ async def lifespan(_: FastAPI):
         handle.close()
 
 
-app = FastAPI(title="NW Log View", lifespan=lifespan)
+app = FastAPI(title="NetRig Log View", lifespan=lifespan)
 
 
 @app.middleware("http")
@@ -74,13 +70,13 @@ app.mount("/static", StaticFiles(directory="/app/static"), name="static")
 
 
 def current_session(request: Request) -> str:
-    token = request.cookies.get("lv_session", "")
-    try:
-        sid = serializer.loads(token, max_age=60 * 60 * 12)
-    except BadSignature:
+    user = request.headers.get("x-netrig-user")
+    signature = request.headers.get("x-netrig-signature", "")
+    expected = hmac.new(NETRIG_SECRET, user.encode(), hashlib.sha256).hexdigest() if user else ""
+    if not expected or not hmac.compare_digest(signature, expected):
         raise HTTPException(401, "Login required")
-    if sid not in sessions:
-        raise HTTPException(401, "Login required")
+    sid = f"netrig:{user}"
+    csrf_by_session.setdefault(sid, secrets.token_urlsafe(24))
     return sid
 
 
@@ -94,10 +90,6 @@ def csrf(request: Request, sid: str = Depends(authorized)) -> str:
         if not secrets.compare_digest(token, csrf_by_session.get(sid, "")):
             raise HTTPException(403, "CSRF validation failed")
     return sid
-
-
-class LoginBody(BaseModel):
-    password: str
 
 
 class NodeBody(BaseModel):
@@ -123,32 +115,9 @@ async def index() -> str:
     return Path("/app/static/index.html").read_text(encoding="utf-8").replace("__BASE_PATH__", BASE_PATH)
 
 
-@app.post("/api/login")
-async def login(body: LoginBody, request: Request) -> JSONResponse:
-    candidate = hashlib.scrypt(body.password.encode("utf-8"), salt=hashlib.sha256(SECRET.encode()).digest()[:16], n=2**14, r=8, p=1)
-    if not secrets.compare_digest(candidate, PASSWORD_HASH):
-        raise HTTPException(401, "Invalid password")
-    sid, csrf_token = secrets.token_urlsafe(24), secrets.token_urlsafe(24)
-    sessions[sid] = "admin"
-    csrf_by_session[sid] = csrf_token
-    response = JSONResponse({"ok": True, "csrf_token": csrf_token})
-    response.set_cookie("lv_session", serializer.dumps(sid), httponly=True, samesite="strict", secure=request.url.scheme == "https",
-                        path=f"{BASE_PATH}/" if BASE_PATH else "/", max_age=43200)
-    return response
-
-
 @app.get("/api/session")
 async def session_info(sid: str = Depends(authorized)) -> dict[str, str]:
     return {"csrf_token": csrf_by_session[sid]}
-
-
-@app.post("/api/logout")
-async def logout(sid: str = Depends(csrf)) -> JSONResponse:
-    sessions.pop(sid, None)
-    csrf_by_session.pop(sid, None)
-    response = JSONResponse({"ok": True})
-    response.delete_cookie("lv_session", path=f"{BASE_PATH}/" if BASE_PATH else "/")
-    return response
 
 
 def _event_dict(row: sqlite3.Row, *, include_raw: bool = False) -> dict[str, Any]:

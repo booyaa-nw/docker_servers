@@ -9,17 +9,17 @@ services:
       - "389:389/tcp"
     environment:
       TZ: Asia/Tokyo
-      # 以下は初回起動時（ldap-shared/settings.json がないとき）だけ使われます
+      # 初回起動時（shared/ldap/settings.json がないとき）だけ使われます
       LDAP_BASE_DN: "dc=asakusa,dc=lab"
       LDAP_ADMIN_PASSWORD: "${LDAP_ADMIN_PASSWORD:?Set LDAP_ADMIN_PASSWORD in .env}"
       LDAP_RADIUS_PASSWORD: "${LDAP_RADIUS_PASSWORD:?Set LDAP_RADIUS_PASSWORD in .env}"
       LDAP_USER1_PASSWORD: "${LDAP_USER1_PASSWORD:?Set LDAP_USER1_PASSWORD in .env}"
       LDAP_USER2_PASSWORD: "${LDAP_USER2_PASSWORD:?Set LDAP_USER2_PASSWORD in .env}"
     volumes:
-      - ./openldap/slapd.conf.tmpl:/templates/slapd.conf.tmpl:ro
-      - ./openldap/bootstrap.ldif.tmpl:/templates/bootstrap.ldif.tmpl:ro
+      - ./openldap/config/slapd.conf.tmpl:/templates/slapd.conf.tmpl:ro
+      - ./openldap/config/bootstrap.ldif.tmpl:/templates/bootstrap.ldif.tmpl:ro
       - ./openldap/data:/var/lib/openldap/openldap-data
-      - ./ldap-shared:/shared
+      - ./shared/ldap:/shared
 
   # RADIUS（LDAP参照 / PAP・MS-CHAPv2・PEAP / Dynamic VLAN）
   freeradius:
@@ -35,9 +35,9 @@ services:
       RADIUS_SECRET: "${RADIUS_SECRET:?Set RADIUS_SECRET in .env}"
       RADIUS_DEBUG: "${RADIUS_DEBUG:-0}"     # 1 にすると freeradius -X
     volumes:
-      - ./freeradius/clients.conf:/etc/freeradius/3.0/clients.conf:ro
-      - ./freeradius/ldap.tmpl:/templates/ldap.tmpl:ro
-      - ./ldap-shared:/shared
+      - ./freeradius/config/clients.conf:/etc/freeradius/3.0/clients.conf:ro
+      - ./freeradius/config/ldap.tmpl:/templates/ldap.tmpl:ro
+      - ./shared/ldap:/shared
     depends_on:
       - openldap
 
@@ -54,8 +54,11 @@ services:
       LDAP_URI: ldap://nw-openldap:389
       APP_BASE_PATH: /ldap
       APP_COOKIE_SECURE: "false"
+      NETRIG_SHARED_SECRET: "${NETRIG_SECRET:?Set NETRIG_SECRET in .env}"
     volumes:
-      - ./ldap-shared:/shared
+      - ./shared/ldap:/shared
+      - ./ldapmgttooz/config:/config:ro
+      - ./ldapmgttooz/data:/data
     depends_on:
       - openldap
 
@@ -67,7 +70,7 @@ services:
       TLS_CERT_CN: "${PUBLIC_DOMAIN:-nwlab.local}"
       TLS_CERT_SAN: "DNS:${PUBLIC_DOMAIN:-nwlab.local},IP:${PI_IP:-127.0.0.1}"
     volumes:
-      - ./secrets/mailpit:/certs
+      - ./mailpit/secrets:/certs
     restart: "no"
 
   mailpit:
@@ -86,8 +89,9 @@ services:
       MP_ALLOWED_HOSTS: mailpit:8025,localhost:8025
       TZ: Asia/Tokyo
     volumes:
-      - ../log_view/mailpit-data:/data
-      - ./secrets/mailpit:/certs:ro
+      - ./mailpit/data:/data
+      - ./mailpit/secrets:/certs:ro
+      - ./mailpit/config:/etc/mailpit:ro
     healthcheck:
       test: ["CMD", "/mailpit", "readyz"]
       interval: 10s
@@ -109,7 +113,7 @@ services:
       SMTP_TLS_KEY: /certs/tls.key
       SMTP_BACKEND: mailpit:1025
     volumes:
-      - ./secrets/mailpit:/certs:ro
+      - ./mailpit/secrets:/certs:ro
     depends_on:
       mailpit-certs:
         condition: service_completed_successfully
@@ -117,8 +121,8 @@ services:
         condition: service_healthy
 
   log-view:
-    build: ../log_view
-    image: nwlab/log-view:local
+    build: ./plugins/log_view
+    image: nwlab/netrig-log-view:local
     container_name: nw-log-view
     restart: unless-stopped
     expose:
@@ -131,10 +135,9 @@ services:
     environment:
       TZ: Asia/Tokyo
       APP_BASE_PATH: /log-view
-      LOG_VIEW_ADMIN_PASSWORD: "${LOG_VIEW_ADMIN_PASSWORD:?Set LOG_VIEW_ADMIN_PASSWORD in .env}"
-      LOG_VIEW_SECRET_KEY: "${LOG_VIEW_SECRET_KEY:?Set LOG_VIEW_SECRET_KEY in .env}"
-      LOG_VIEW_DB: /data/log_view.sqlite3
-      LOG_VIEW_MIB_DIR: /mibs
+      NETRIG_SHARED_SECRET: "${NETRIG_SECRET:?Set NETRIG_SECRET in .env}"
+      LOG_VIEW_DB: /data/logs.sqlite3
+      LOG_VIEW_MIB_DIR: /config/mibs
       LOG_VIEW_MIB_CACHE: /data/mibs-compiled
       MAILPIT_API_URL: http://mailpit:8025
       MAILPIT_USERNAME: "${MAILPIT_USERNAME:-}"
@@ -142,8 +145,8 @@ services:
       MAILPIT_POLL_SECONDS: "${MAILPIT_POLL_SECONDS:-2}"
       LOG_RETENTION_DAYS: "${LOG_RETENTION_DAYS:-30}"
     volumes:
-      - ../log_view/data:/data
-      - ../log_view/mibs:/mibs
+      - ./plugins/log_view/data:/data
+      - ./plugins/log_view/config:/config
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -154,6 +157,21 @@ services:
       mailpit:
         condition: service_healthy
 
+  netrig:
+    build: ./netrig
+    image: nwlab/netrig:local
+    container_name: nw-netrig
+    restart: unless-stopped
+    expose:
+      - "8080"
+    environment:
+      TZ: Asia/Tokyo
+      NETRIG_ADMIN_PASSWORD: "${NETRIG_ADMIN_PASSWORD:?Set NETRIG_ADMIN_PASSWORD in .env}"
+      NETRIG_SECRET: "${NETRIG_SECRET:?Set NETRIG_SECRET in .env}"
+    volumes:
+      - ./netrig/config:/config:ro
+      - ./netrig/data:/data
+
   caddy:
     image: caddy:2-alpine
     container_name: nw-caddy
@@ -161,14 +179,11 @@ services:
     ports:
       - "80:80/tcp"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./portal:/srv:ro
-      - caddy_data:/data
-      - caddy_config:/config
+      - ./caddy/config/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/data:/data
+      - ./caddy/data/config:/config
     depends_on:
+      - netrig
       - ldapmgttooz
       - log-view
 
-volumes:
-  caddy_data:
-  caddy_config:

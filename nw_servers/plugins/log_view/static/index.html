@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="base-path" content="__BASE_PATH__">
-  <title>NW Log View</title>
+  <title>ログビュー | NetRig</title>
   <link rel="stylesheet" href="__BASE_PATH__/static/style.css">
 </head>
 <body>
   <header>
-    <div><h1>NW Log View</h1><span id="status">接続中…</span></div>
+    <div><h1>NetRig <span class="plugin-title">ログビュー</span></h1><span id="status">接続中…</span></div>
     <div class="header-actions"><span id="db-status"></span><a class="header-link" href="/">ポータル</a><button id="manage-open">ノード・グループ</button><button id="mib-open">MIB管理</button><button id="admin-open">保守</button><button id="logout">ログアウト</button></div>
   </header>
   <main>
@@ -29,9 +29,6 @@
     </section>
   </main>
 
-  <dialog id="login-dialog">
-    <form id="login-form" class="dialog-card"><h2>ログイン</h2><p>管理者パスワードを入力してください。</p><input id="password" type="password" autocomplete="current-password" required><button>ログイン</button><p id="login-error" class="error"></p></form>
-  </dialog>
   <dialog id="detail-dialog"><div class="dialog-card wide"><div id="detail-content"></div></div></dialog>
   <dialog id="manage-dialog"><div class="dialog-card wide"><button class="close" data-close>閉じる</button><h2>ノード・グループ管理</h2><div class="manage-grid"><form id="node-form"><h3>ノード登録・更新</h3><input id="node-id" type="hidden"><label>名前<input id="node-name" required></label><label>IPアドレス（改行区切り）<textarea id="node-addresses" rows="3" placeholder="192.0.2.10"></textarea></label><label>グループ<select id="node-groups" multiple size="4"></select></label><label>説明<input id="node-description"></label><button>保存</button><button type="button" id="node-reset">新規入力</button></form><form id="group-form"><h3>グループ追加</h3><label>名前<input id="group-name" required></label><label>説明<input id="group-description"></label><button>追加</button><div id="group-items"></div></form></div><h3>登録済みノード</h3><div id="node-items"></div><h3>未登録の送信元</h3><div id="unknown-items"></div></div></dialog>
   <dialog id="admin-dialog"><div class="dialog-card wide"><button class="close" data-close>閉じる</button><h2>保守</h2><p id="admin-info"></p><div class="admin-actions"><button id="backup">バックアップをダウンロード</button><label>バックアップを復元<input type="file" id="restore-file" accept=".sqlite3,.db"></label><button id="retention-preview">保持期間の削除件数を確認</button><button id="retention-delete" class="danger">対象ログを削除</button></div><p id="admin-result"></p></div></dialog>

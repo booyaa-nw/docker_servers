@@ -13,7 +13,7 @@ RUN set -e; R=/etc/freeradius/3.0; \
     sed -i '0,/^[[:space:]]*post-auth {/s//post-auth {\n\tnwlab_vlan_inner/' $R/sites-available/inner-tunnel; \
     grep -q nwlab_vlan_outer $R/sites-available/default; \
     grep -q nwlab_vlan_inner $R/sites-available/inner-tunnel
-COPY nwlab_vlan_base /etc/freeradius/3.0/policy.d/nwlab_vlan_base
+COPY config/nwlab_vlan_base /etc/freeradius/3.0/policy.d/nwlab_vlan_base
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

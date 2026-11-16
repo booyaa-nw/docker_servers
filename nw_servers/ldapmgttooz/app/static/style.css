@@ -28,6 +28,7 @@ h2 { font-size: 15px; margin: 0 0 12px; }
 .top nav a { padding: 6px 12px; border-radius: 6px; color: #edf5fa; white-space: nowrap; }
 .top nav a.on { background: #294963; color: #fff; font-weight: 600; }
 .top button.link { color: #d7e6f0; }
+.top .logout-link { color: #d7e6f0; white-space: nowrap; }
 main { max-width: 1180px; margin: 0 auto; padding: 20px 16px 60px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin-bottom: 16px; }
 .card.danger { border-color: color-mix(in srgb, var(--danger) 40%, var(--line)); }

@@ -5,12 +5,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
-COPY requirements.txt .
+COPY config/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt \
     && useradd --system --uid 10001 --home-dir /app appuser
 COPY app ./app
 COPY static ./static
-RUN mkdir -p /data && chown appuser:appuser /data
+RUN mkdir -p /data /config/mibs && chown -R appuser:appuser /data /config
 USER 10001:10001
 
 EXPOSE 8080 1514/udp 1514/tcp 1162/udp 1162/tcp

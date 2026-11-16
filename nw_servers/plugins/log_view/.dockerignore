@@ -1,5 +1,5 @@
 data/
-mibs/
+config/mibs/
 .env
 __pycache__/
 *.py[cod]

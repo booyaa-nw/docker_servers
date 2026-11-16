@@ -1,7 +1,7 @@
 FROM python:3.15-slim
 
 WORKDIR /srv
-COPY requirements.txt .
+COPY config/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ /srv/app/
 

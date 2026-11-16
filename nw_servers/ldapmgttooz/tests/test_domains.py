@@ -1,5 +1,6 @@
 """Run with ldapmgttooz on PYTHONPATH and httpx installed."""
 from pathlib import Path
+import hmac
 import re
 import tempfile
 import unittest
@@ -9,7 +10,7 @@ from fastapi.testclient import TestClient
 from app import config, domain
 from app.directory import DirectoryError
 
-with patch.dict("os.environ", {"LDAPMGTTOOZ_SECRET": "test-session-key"}):
+with patch.dict("os.environ", {"LDAPMGTTOOZ_SECRET": "test-session-key", "NETRIG_SHARED_SECRET": "test-session-key"}):
     from app import main
 
 
@@ -57,13 +58,12 @@ class DomainTests(unittest.TestCase):
 
     def test_web_routes_and_stale_form(self):
         self.enterContext(patch.object(main, "sync_policy"))
-        self.enterContext(patch.object(main.Directory, "verify_bind", return_value=True))
         client = self.enterContext(TestClient(main.app, follow_redirects=False))
         self.assertEqual(client.get("/domains").status_code, 303)
-        login = client.get("/login")
-        csrf = re.search(r'name="_csrf" value="([^"]+)"', login.text)[1]
-        self.assertEqual(client.post("/login", data={"_csrf": csrf, "username": "admin",
-                                                     "password": "lab-initial"}).status_code, 303)
+        user = "admin"
+        secret = b"test-session-key"
+        signature = hmac.new(secret, user.encode(), "sha256").hexdigest()
+        client.headers.update({"X-NetRig-User": user, "X-NetRig-Signature": signature})
         page = client.get("/domains")
         self.assertEqual(page.status_code, 200)
         self.assertIn("LdapMgtTooz", page.text)

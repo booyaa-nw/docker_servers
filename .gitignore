@@ -9,6 +9,6 @@ pki/import/
 pki/.build/
 
 .ldapmgttooz-test-deps/
-nw_servers/ldap-shared/
+nw_servers/shared/ldap/
 nw_servers/openldap/data/
 **/__pycache__/

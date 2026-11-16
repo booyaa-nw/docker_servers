@@ -49,7 +49,7 @@ class LoginRequired(Exception):
 
 @app.exception_handler(LoginRequired)
 async def _login_required(request: Request, exc):
-    return back("/login")
+    return RedirectResponse("/login?return=%2Fldap%2F", status_code=303)
 
 
 @app.exception_handler(config.SettingsMissing)
@@ -59,7 +59,11 @@ async def _settings_missing(request: Request, exc):
 
 # ------------------------------------------------------------------ helpers
 def guard(request: Request):
-    if not request.session.get("auth"):
+    user = request.headers.get("x-netrig-user", "")
+    signature = request.headers.get("x-netrig-signature", "")
+    secret = os.getenv("NETRIG_SHARED_SECRET", "").encode()
+    expected = hmac.new(secret, user.encode(), "sha256").hexdigest() if secret and user else ""
+    if not expected or not hmac.compare_digest(signature, expected):
         raise LoginRequired()
 
 
@@ -108,14 +112,13 @@ async def form(request: Request):
     if not isinstance(token, str) or not request.session.get("csrf") or not hmac.compare_digest(token, request.session["csrf"]):
         raise HTTPException(403, "フォームを開き直してください")
     path = request.url.path
-    if path not in ("/login", "/logout"):
-        cfg = config.load_settings()
-        if f.get("_generation") != str(cfg["generation"]):
-            raise HTTPException(409, "ドメインまたは設定が変わりました。画面を開き直してください")
-        if not path.startswith("/domains/"):
-            ldap = config.read_json(config.STATUS_LDAP) or {}
-            if not ldap.get("ok") or ldap.get("applied_generation") != cfg["generation"]:
-                raise HTTPException(409, "LDAPの反映完了後に画面を開き直してください")
+    cfg = config.load_settings()
+    if f.get("_generation") != str(cfg["generation"]):
+        raise HTTPException(409, "ドメインまたは設定が変わりました。画面を開き直してください")
+    if not path.startswith("/domains/"):
+        ldap = config.read_json(config.STATUS_LDAP) or {}
+        if not ldap.get("ok") or ldap.get("applied_generation") != cfg["generation"]:
+            raise HTTPException(409, "LDAPの反映完了後に画面を開き直してください")
     return f, (lambda k, default="": (f.get(k) or default).strip() if isinstance(f.get(k), str) else default)
 
 
@@ -128,39 +131,6 @@ def _startup():
 
 
 # ------------------------------------------------------------------ auth
-@app.get("/login", response_class=HTMLResponse)
-def login_get(request: Request):
-    return page(request, "login.html")
-
-
-@app.post("/login")
-async def login_post(request: Request):
-    _, v = await form(request)
-    cfg = config.load_settings()
-    d = Directory(cfg)
-    expected = cfg["admin_rdn"].split("=", 1)[-1]
-    password = v("password")
-    ok = False
-    if v("username") == expected:
-        r = d.verify_bind(d.admin_dn, password)
-        if r is None:   # LDAPに届かない場合は保存済み設定で照合（設定ミスで締め出されないように）
-            r = hmac.compare_digest(password.encode(), cfg["admin_password"].encode())
-        ok = bool(r)
-    if not ok:
-        flash(request, "ユーザー名またはパスワードが違います", "error")
-        return back("/login")
-    request.session.clear()
-    request.session["auth"] = True
-    return back("/users")
-
-
-@app.post("/logout")
-async def logout(request: Request):
-    await form(request)
-    request.session.clear()
-    return back("/login")
-
-
 @app.get("/")
 def root():
     return back("/users")

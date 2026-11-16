@@ -1,5 +1,6 @@
-# docker_servers
-For Netowrk Test Servers
+# Docker
+
+Docker Compose environments for the lab. The integrated network test stack is [NetRig](nw_servers/README.md).
 
 
 # 最小限のクローンで利用する

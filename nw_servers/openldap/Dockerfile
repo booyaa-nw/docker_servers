@@ -7,7 +7,7 @@ RUN apk add --no-cache \
       gettext \
       jq
 
-COPY nwlab.schema /etc/openldap/schema/nwlab.schema
+COPY config/nwlab.schema /etc/openldap/schema/nwlab.schema
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

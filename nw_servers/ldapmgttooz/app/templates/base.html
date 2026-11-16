@@ -7,9 +7,9 @@
 <link rel="stylesheet" href="{{ base_path }}/static/style.css">
 </head>
 <body>
-{% if request.session.get('auth') %}
+{% if request.headers.get('x-netrig-user') or request.session.get('auth') %}
 <header class="top">
-  <div class="brand"><a href="/" class="portal-link">NW Lab</a><span class="domain">{{ domain }}</span></div>
+  <div class="brand"><a href="/" class="portal-link">NetRig</a><span class="domain">{{ domain }}</span></div>
   <nav>
     <a href="{{ base_path }}/users" class="{{ 'on' if nav=='users' }}">ユーザ</a>
     <a href="{{ base_path }}/groups" class="{{ 'on' if nav=='groups' }}">グループ</a>
@@ -18,7 +18,7 @@
     <a href="{{ base_path }}/domains" class="{{ 'on' if nav=='domains' }}">ドメイン</a>
     <a href="{{ base_path }}/settings" class="{{ 'on' if nav=='settings' }}">管理設定</a>
   </nav>
-  <form method="post" action="{{ base_path }}/logout"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="_generation" value="{{ generation }}"><button class="link">ログアウト</button></form>
+  <a class="logout-link" href="/logout">ログアウト</a>
 </header>
 {% if state.pending and not state.errors %}
 <div class="banner pending" id="pending">設定を反映しています…（LDAP: {{ '反映中' if state.ldap_pending else '完了' }} / RADIUS: {{ '反映中' if state.radius_pending else '完了' }}）</div>

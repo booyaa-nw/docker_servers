@@ -58,14 +58,13 @@ def save_settings(cfg: dict) -> dict:
 
 
 def session_secret() -> str:
-    env = os.environ.get("LDAPMGTTOOZ_SECRET") or os.environ.get("LDAPADMIN_SECRET")
+    env = os.environ.get("LDAPMGTTOOZ_SECRET")
     if env:
         return env
     try:
         return SECRET_FILE.read_text().strip()
     except FileNotFoundError:
-        legacy = SHARED / "ldapadmin-secret"
-        s = legacy.read_text().strip() if legacy.is_file() else secrets.token_urlsafe(48)
+        s = secrets.token_urlsafe(48)
         atomic_write(SECRET_FILE, s.encode())
         return s
 
