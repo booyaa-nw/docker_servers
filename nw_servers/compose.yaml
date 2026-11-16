@@ -78,7 +78,7 @@ services:
     container_name: nw-mailpit
     restart: unless-stopped
     ports:
-      - "1025:1025/tcp"
+      - "25:1025/tcp"
     expose:
       - "8025"
     environment:
