@@ -6,12 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 COPY config/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt \
-    && useradd --system --uid 10001 --home-dir /app appuser
+RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY static ./static
-RUN mkdir -p /data /config/mibs && chown -R appuser:appuser /data /config
-USER 10001:10001
+RUN mkdir -p /data /config/mibs
 
 EXPOSE 8080 1514/udp 1514/tcp 1162/udp 1162/tcp
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]

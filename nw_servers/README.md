@@ -49,8 +49,8 @@ docker compose logs -f netrig caddy ldapmgttooz log-view mailpit
 ```sh
 docker compose down
 sudo find ./openldap/data -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-sudo install -d -o 10001 -g 10001 plugins/log_view/data plugins/log_view/config/mibs
-sudo chown -R 10001:10001 plugins/log_view/data plugins/log_view/config/mibs
+sudo install -d -o "$(id -u)" -g "$(id -g)" plugins/log_view/data plugins/log_view/config/mibs
+sudo chown -R "$(id -u):$(id -g)" plugins/log_view/data plugins/log_view/config/mibs
 docker compose up -d --build
 ```
 
@@ -79,10 +79,10 @@ shared/ldap/
 
 Composeファイルと各コンテナのDockerfileは、それぞれの実行環境に近い場所にあります。ログビューのアプリコードは `plugins/log_view/app/`、MIBソースは `plugins/log_view/config/mibs/`、SQLite DBとコンパイル済みMIBは `plugins/log_view/data/` に保存されます。
 
-ログビューの書き込み先はコンテナUID 10001です。Linuxホストでは初回起動前に所有者を合わせます。
+ログビューは `.env` の `LOG_VIEW_UID` / `LOG_VIEW_GID` で指定したホストユーザーとして動作します。Piで `id -u` と `id -g` を実行し、その値を `.env` に設定してください。既存ディレクトリの所有者も同じUID/GIDに揃えます。
 
 ```sh
-sudo chown -R 10001:10001 plugins/log_view/data plugins/log_view/config/mibs
+sudo chown -R "$(id -u):$(id -g)" plugins/log_view/data plugins/log_view/config/mibs
 ```
 
 ## バックアップ

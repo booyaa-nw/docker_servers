@@ -125,6 +125,7 @@ services:
     image: nwlab/netrig-log-view:local
     container_name: nw-log-view
     restart: unless-stopped
+    user: "${LOG_VIEW_UID:-1000}:${LOG_VIEW_GID:-1000}"
     expose:
       - "8080"
     ports:
@@ -146,7 +147,7 @@ services:
       LOG_RETENTION_DAYS: "${LOG_RETENTION_DAYS:-30}"
     volumes:
       - ./plugins/log_view/data:/data
-      - ./plugins/log_view/config:/config
+      - ./plugins/log_view/config/mibs:/config/mibs
     security_opt:
       - no-new-privileges:true
     cap_drop:
