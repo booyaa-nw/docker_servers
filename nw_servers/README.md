@@ -56,6 +56,26 @@ docker compose up -d --build
 
 OpenLDAPの初期化完了後にLDAP管理画面を開きます。ログビューの起動ログにMIBディレクトリの権限エラーが出る場合は、`.env`の`LOG_VIEW_UID` / `LOG_VIEW_GID`と、上記ディレクトリの所有者が一致していることを確認してください。
 
+ログビューはホストUID/GIDで動作します。Dockerのuser namespace mappingが有効だと、bind mount上のホスト所有UIDとコンテナ内UIDが異なり、書き込みできない場合があります。ログビューサービスは`userns_mode: host`でこのマッピングを使わず、アプリの実行UIDは`.env`の値を維持します。`sqlite3.OperationalError: unable to open database file`が続く場合は、Composeのマウント先と実際の書き込みを次で確認してください。既存DBやMIBファイルを削除する必要はありません。
+
+```sh
+cd ~/.local/docker/nw_servers
+id -u
+id -g
+# .env の LOG_VIEW_UID / LOG_VIEW_GID を上記の値に合わせる
+sudo install -d -o "$(id -u)" -g "$(id -g)" plugins/log_view/data plugins/log_view/config/mibs
+sudo chown -R "$(id -u):$(id -g)" plugins/log_view/data plugins/log_view/config/mibs
+docker compose up -d --force-recreate log-view
+docker compose logs --tail=50 log-view
+```
+
+```sh
+docker compose config
+docker inspect nw-log-view --format '{{json .Mounts}}'
+docker compose run --rm --no-deps --entrypoint sh log-view -c \
+  'id; ls -ldn /data /config/mibs; touch /data/.write-test && rm /data/.write-test; touch /config/mibs/.write-test && rm /config/mibs/.write-test'
+```
+
 LDAP/RADIUSだけを更新する場合も同じComposeプロジェクトを使います。
 
 ```sh
