@@ -77,7 +77,7 @@ mailpit/{config,data,secrets}/
 shared/ldap/
 ```
 
-Composeファイルと各コンテナのDockerfileは、それぞれの実行環境に近い場所にあります。ログビューのアプリコードは `plugins/log_view/app/`、MIBソースは `plugins/log_view/config/mibs/`、SQLite DBとコンパイル済みMIBは `plugins/log_view/data/` に保存されます。
+Composeファイルと各コンテナのDockerfileは、それぞれの実行環境に近い場所にあります。ログビューはイメージビルド時にDebianの`snmp-mibs-downloader`で標準MIBを取得し、初回起動時に不足分を `plugins/log_view/config/mibs/` へコピーします。手動MIBも同じ場所に保存されます。SQLite DBとコンパイル済みMIBは `plugins/log_view/data/` に保存されます。
 
 ログビューは `.env` の `LOG_VIEW_UID` / `LOG_VIEW_GID` で指定したホストユーザーとして動作します。Piで `id -u` と `id -g` を実行し、その値を `.env` に設定してください。既存ディレクトリの所有者も同じUID/GIDに揃えます。
 

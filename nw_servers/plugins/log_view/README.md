@@ -8,6 +8,8 @@ Syslog、SNMP Trap、Mailpitメールを集約して検索・確認するNetRig�
 - `data/logs.sqlite3`: 受信イベント、ノード、グループ
 - `data/mibs-compiled/`: コンパイル済みMIBキャッシュ
 
+イメージのビルド時にDebianの`snmp-mibs-downloader`でIETF RFCとIANAの標準MIBを取得します。コンテナ起動時に`config/mibs/`へ不足分だけコピーするため、手動で追加したMIBは上書きしません。標準MIBを更新する場合はログビューイメージを再ビルドしてください。Debianパッケージは`non-free`リポジトリのものです。
+
 イベントDBのバックアップ・復元、保持期間に基づく削除は保守画面から行えます。raw BERやExportにはSNMP community等が含まれる場合があるため、保管先を適切に保護してください。
 
 ## 機能
