@@ -17,6 +17,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 COPY --from=standard-mibs /usr/local/share/netrig/default-mibs /usr/local/share/netrig/default-mibs
+COPY config/mibs-bundled /app/config/mibs-bundled
 COPY config/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app

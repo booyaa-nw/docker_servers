@@ -26,3 +26,5 @@ Composeのホスト側保存先は`.env`の`LOG_VIEW_DATA_PATH`と`LOG_VIEW_MIB_
 ホスト受信ポートは514/tcp+udp（Syslog）と162/tcp+udp（SNMP Trap）です。Mailpit APIとWeb UIはDocker内部だけで利用します。
 
 初回起動時にMIBファイルのコピーができない場合もWebアプリは起動し、コンテナログにUIDと必要な権限修正を表示します。.envのLOG_VIEW_UID / LOG_VIEW_GIDをホスト側MIBディレクトリの所有者に合わせてください。
+
+FortiGate MIBのインポートでは、同梱のconfig/mibs-bundled/FORTINET-CORE-MIB.mibを依存MIBとして自動配置します。コンパイル時の失敗原因はMIB管理画面に返されます。

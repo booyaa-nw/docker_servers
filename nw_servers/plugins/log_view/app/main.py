@@ -340,17 +340,35 @@ async def import_mib(file: UploadFile = File(...), _: str = Depends(csrf)) -> di
         raise HTTPException(413, "MIB file must be between 1 byte and 5 MiB")
     destination = mib_dir / filename
     previous = destination.read_bytes() if destination.exists() else None
-    destination.write_bytes(content)
     module = destination.stem
+    staged: list[tuple[Path, bytes | None]] = []
     try:
-        from .mibs import invalidate_module, validate_module
+        from .mibs import _module_files, invalidate_module, validate_module
+
+        # Fortinet modules import FORTINET-CORE-MIB. If this companion file is
+        # not in the upload directory yet, stage it from the bundled FG MIBs.
+        required_companions = {"FORTINET-FORTIGATE-MIB": ["FORTINET-CORE-MIB"]}
+        bundled_dir = Path(__file__).resolve().parents[2] / "config" / "mibs-bundled"
+        current_modules = _module_files()
+        for companion in required_companions.get(module, []):
+            if companion not in current_modules:
+                companion_source = bundled_dir / f"{companion}.mib"
+                if not companion_source.is_file():
+                    raise ValueError(f"Required companion MIB '{companion}' is missing")
+                companion_destination = mib_dir / companion_source.name
+                staged.append((companion_destination,
+                               companion_destination.read_bytes() if companion_destination.exists() else None))
+                companion_destination.write_bytes(companion_source.read_bytes())
+
+        destination.write_bytes(content)
         invalidate_module(module)
         validate_module(module)
     except Exception as exc:
-        if previous is None:
-            destination.unlink(missing_ok=True)
-        else:
-            destination.write_bytes(previous)
+        for path, old_content in [(destination, previous), *staged]:
+            if old_content is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_bytes(old_content)
         try:
             from .mibs import invalidate_module
             invalidate_module(module)

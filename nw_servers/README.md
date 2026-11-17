@@ -56,18 +56,22 @@ docker compose up -d --build
 
 OpenLDAPの初期化完了後にLDAP管理画面を開きます。ログビューの起動ログにMIBディレクトリの権限エラーが出る場合は、`.env`の`LOG_VIEW_UID` / `LOG_VIEW_GID`と、上記ディレクトリの所有者が一致していることを確認してください。
 
-ログビューはホストUID/GIDで動作します。Dockerのuser namespace mappingが有効だと、bind mount上のホスト所有UIDとコンテナ内UIDが異なり、書き込みできない場合があります。ログビューサービスは`userns_mode: host`でこのマッピングを使わず、アプリの実行UIDは`.env`の値を維持します。`sqlite3.OperationalError: unable to open database file`が続く場合は、Composeのマウント先と実際の書き込みを次で確認してください。既存DBやMIBファイルを削除する必要はありません。
+Docker rootlessでは、bind mount内の所有者はホスト側でsubuid/subgidに変換されます。ホストUIDが1001の場合、既定のマッピングではコンテナUID 1001がホストUID 166536（`1001 + 165535`）に対応します。ログビューのデータとMIBディレクトリはこの変換後UID/GIDに所有させ、`.env`の`LOG_VIEW_UID/GID`にはコンテナ内で使うホストUID/GID（通常は1001）を指定してください。`chmod 777`は不要です。`sqlite3.OperationalError: unable to open database file`が続く場合は、Composeのマウント先と実際の書き込みを確認してください。既存DBやMIBファイルを削除する必要はありません。
 
 ```sh
 cd ~/.local/docker/nw_servers
 id -u
 id -g
-# .env の LOG_VIEW_UID / LOG_VIEW_GID を上記の値に合わせる
-sudo install -d -o "$(id -u)" -g "$(id -g)" plugins/log_view/data plugins/log_view/config/mibs
-sudo chown -R "$(id -u):$(id -g)" plugins/log_view/data plugins/log_view/config/mibs
+# .env の LOG_VIEW_UID / LOG_VIEW_GID はコンテナ内UID/GIDとしてホスト値（1001）を維持
+# 既存の緩い権限を標準化し、rootlessのmapped ownerを割り当て
+sudo chmod -R u=rwX,go= plugins/log_view/data plugins/log_view/config/mibs
+sudo install -d -o 166536 -g 166536 plugins/log_view/data plugins/log_view/config/mibs
+sudo chown -R 166536:166536 plugins/log_view/data plugins/log_view/config/mibs
 docker compose up -d --force-recreate log-view
 docker compose logs --tail=50 log-view
 ```
+
+`166536`はユーザーのsubuid範囲が`165536`から始まるrootless Dockerの例です。実際の対応値は`/etc/subuid`と`/etc/subgid`の各開始値に、コンテナUID/GID 1001から1を引いた値を加えて確認してください。
 
 ```sh
 docker compose config
