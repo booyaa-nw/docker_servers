@@ -1,4 +1,12 @@
 const $ = (id) => document.getElementById(id);
+window.addEventListener("error", event => {
+  const result = $("mib-result");
+  if (result) result.textContent = `画面スクリプトエラー: ${event.message}`;
+});
+window.addEventListener("unhandledrejection", event => {
+  const result = $("mib-result");
+  if (result) result.textContent = `画面処理エラー: ${event.reason?.message || event.reason}`;
+});
 const BASE_PATH = document.querySelector('meta[name="base-path"]')?.content || "";
 const appUrl = (path) => `${BASE_PATH}${path}`;
 let csrfToken = "";
@@ -137,7 +145,28 @@ $("logout").onclick = () => { location.href = "/logout"; };
 $("node-form").onsubmit = e => saveNode(e).catch(err=>alert(err.message));
 $("node-reset").onclick = resetNodeForm;
 $("group-form").onsubmit = async e => { e.preventDefault(); try { await api("/api/groups",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:$("group-name").value,description:$("group-description").value})}); e.target.reset(); await loadManage(); } catch(err){alert(err.message);} };
-$("mib-form").onsubmit = async e => { e.preventDefault(); const file=$("mib-file").files[0]; if(!file)return; const form=new FormData(); form.append("file",file); try { const data=await (await api("/api/mibs",{method:"POST",body:form})).json(); $("mib-result").textContent=`${data.name} を登録しました`; e.target.reset(); await loadMibs(); } catch(err) { $("mib-result").textContent=err.message; } };
+$("mib-form").onsubmit = async e => {
+  e.preventDefault();
+  const file = $("mib-file").files[0];
+  if (!file) { $("mib-result").textContent = "MIBファイルを選択してください"; return; }
+  const button = $("mib-submit");
+  button.disabled = true;
+  button.textContent = "コンパイル中…";
+  $("mib-result").textContent = `${file.name} をアップロードしてコンパイルしています…`;
+  const form = new FormData();
+  form.append("file", file);
+  try {
+    const data = await (await api("/api/mibs", {method:"POST", body:form})).json();
+    $("mib-result").textContent = `${data.name} を登録しました`;
+    e.target.reset();
+    await loadMibs();
+  } catch (err) {
+    $("mib-result").textContent = `インポート失敗: ${err.message}`;
+  } finally {
+    button.disabled = false;
+    button.textContent = "インポート";
+  }
+};
 $("backup").onclick = () => downloadBackup().catch(e=>alert(e.message));
 $("retention-preview").onclick = () => retention(true).catch(e=>alert(e.message));
 $("retention-delete").onclick = () => { if(confirm("保持期間より古いイベントを削除します。先にバックアップしましたか？")) retention(false).catch(e=>alert(e.message)); };

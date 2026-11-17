@@ -112,7 +112,11 @@ class DeleteBody(BaseModel):
 
 @app.get("/", response_class=HTMLResponse)
 async def index() -> str:
-    return Path("/app/static/index.html").read_text(encoding="utf-8").replace("__BASE_PATH__", BASE_PATH)
+    response = HTMLResponse(
+        Path("/app/static/index.html").read_text(encoding="utf-8").replace("__BASE_PATH__", BASE_PATH)
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.get("/api/session")
