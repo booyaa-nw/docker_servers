@@ -14,7 +14,8 @@ export SCHEMA_DIR=${SCHEMA_DIR:-/etc/openldap/schema}
 export MODULE_DIR=${MODULE_DIR:-/usr/lib/openldap}
 export RUN_DIR=${RUN_DIR:-/run/openldap}
 DATA_ROOT=${DATA_DIR:-/var/lib/openldap/openldap-data}
-SLAPD_USER=${SLAPD_USER:-ldap}
+SLAPD_UID=${SLAPD_UID:-0}
+SLAPD_GID=${SLAPD_GID:-0}
 SLAPD_URLS=${SLAPD_URLS:-ldap:///}
 LOCAL_URI=${LOCAL_URI:-ldap://127.0.0.1}
 
@@ -26,11 +27,17 @@ get() { jq -r "$1" "$SETTINGS"; }
 
 umask 077
 mkdir -p "$RUN_DIR" "$DATA_ROOT"
-chown "$SLAPD_USER:$SLAPD_USER" "$RUN_DIR"
+chown "$SLAPD_UID:$SLAPD_GID" "$RUN_DIR" "$DATA_ROOT"
+chown -R "$SLAPD_UID:$SLAPD_GID" "$SHARED"
+
+set_bind_owner() {
+  chown "$SLAPD_UID:$SLAPD_GID" "$@"
+}
 
 write_status() { # $1=generation $2=true/false $3=message $4=phase (optional)
   jq -n --argjson g "$1" --argjson ok "$2" --arg m "$3" --arg t "$(now)" --arg b "$(get .base_dn)" --arg phase "${4:-}" \
     '{applied_generation:$g, ok:$ok, message:$m, base_dn:$b, time:$t, phase:$phase}' > "$STATUS.tmp"
+  set_bind_owner "$STATUS.tmp"
   mv "$STATUS.tmp" "$STATUS"
 }
 
@@ -47,6 +54,7 @@ seed_settings() {
       admin_rdn:"cn=admin", admin_password:$apw,
       bind_rdn:"cn=radius,ou=ServiceAccounts", bind_password:$bpw}' > "$SETTINGS.tmp"
   chmod 600 "$SETTINGS.tmp"
+  set_bind_owner "$SETTINGS.tmp"
   mv "$SETTINGS.tmp" "$SETTINGS"
 }
 
@@ -58,8 +66,9 @@ render() { # $1=出力先
   export LDAP_BASE_DN LDAP_ADMIN_DN LDAP_BIND_DN LDAP_ADMIN_PASSWORD_HASH
   envsubst '${SCHEMA_DIR} ${MODULE_DIR} ${RUN_DIR} ${DATA_DIR} ${LDAP_BASE_DN} ${LDAP_ADMIN_DN} ${LDAP_ADMIN_PASSWORD_HASH} ${LDAP_BIND_DN}' \
     < "$TEMPLATES/slapd.conf.tmpl" > "$1.tmp"
-  chown "root:$SLAPD_USER" "$1.tmp"
+  chown "root:$SLAPD_GID" "$1.tmp"
   chmod 640 "$1.tmp"
+  set_bind_owner "$1.tmp"
   mv "$1.tmp" "$1"
 }
 
@@ -74,7 +83,7 @@ wait_ready() {
 }
 
 start_slapd() { # $1=URL
-  slapd -d "${LDAP_LOG_LEVEL:-256}" -h "$1" -f "$CONF" -u "$SLAPD_USER" -g "$SLAPD_USER" &
+  slapd -d "${LDAP_LOG_LEVEL:-256}" -h "$1" -f "$CONF" -u "$SLAPD_UID" -g "$SLAPD_GID" &
   PID=$!
 }
 
@@ -106,6 +115,7 @@ bootstrap() {
   rm -f "$RUN_DIR/seed.ldif"
   stop_slapd
   touch "$MARKER"
+  chown "$SLAPD_UID:$SLAPD_GID" "$MARKER"
   log "初期データの投入が完了しました"
 }
 
@@ -132,14 +142,14 @@ while :; do
   export DATA_DIR
   MARKER=$DATA_DIR/.bootstrapped
   mkdir -p "$DATA_DIR"
-  chown "$SLAPD_USER:$SLAPD_USER" "$DATA_DIR"
+  chown -R "$SLAPD_UID:$SLAPD_GID" "$DATA_DIR"
   if [ "$SLOT" != legacy ]; then
-    chown "$SLAPD_USER:$SLAPD_USER" "$DATA_ROOT" "$DATA_ROOT/domains"
+    chown "$SLAPD_UID:$SLAPD_GID" "$DATA_ROOT" "$DATA_ROOT/domains"
   fi
   render "$CONF"
   if [ "$SLOT" = legacy ] && [ -f "$MARKER" ]; then
-    chown "$SLAPD_USER:$SLAPD_USER" "$DATA_DIR/data.mdb"
-    if [ -e "$DATA_DIR/lock.mdb" ]; then chown "$SLAPD_USER:$SLAPD_USER" "$DATA_DIR/lock.mdb"; fi
+    chown "$SLAPD_UID:$SLAPD_GID" "$DATA_DIR/data.mdb"
+    if [ -e "$DATA_DIR/lock.mdb" ]; then chown "$SLAPD_UID:$SLAPD_GID" "$DATA_DIR/lock.mdb"; fi
   fi
   if [ ! -f "$MARKER" ]; then
     if [ -e "$DATA_DIR/data.mdb" ]; then

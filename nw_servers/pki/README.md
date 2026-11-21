@@ -7,19 +7,15 @@ Root直下にServer CA、Client CA、FortiGateごとのInspection CAを作成す
 ## 初回準備（Piのnw_servers）
 
 ```bash
-mkdir -p pki/data pki/offline pki/import pki/secrets ldap/certs
-chmod 700 pki/data pki/offline pki/import pki/secrets
-umask 077
-(umask 077; set -C; openssl rand -base64 48 > pki/secrets/root.pass)
-# UID/GIDが1000以外なら.envにPKI_UIDとPKI_GIDを設定（id -u / id -gで確認）
+bash scripts/prepare-bind-mounts.sh
 docker compose -f compose.pki.yaml build pki
 docker compose -f compose.pki.yaml run --rm pki self-test
 ```
 
-root.passは初回のみ生成する。既存ファイルを上書きしない。
+通常の初期セットアップでは`bash scripts/setup.sh`が保存先と`root.pass`を初期化します。既存の`root.pass`は上書きしません。
 DockerfileはCFSSL v1.7.0のソースをGoでビルドする。初回ビルドにはインターネット接続が必要。
 ビルド後のCLIコンテナはnetwork_mode:noneで動き、外部接続・ポート公開はしない。
-通常コマンドはホストのUID/GID 1000として動く。実行者と異なる場合は上記変数を設定する。
+通常コマンドはホストのローカルユーザー所有でファイルを作成する。
 
 self-testは一時環境で実CFSSLによる発行、CA制約、EKU分離、LDAP配布、PKCS#12、CRLを検証する。
 Root秘密鍵を含む本番のlabデータには触れない。CFSSL不在のホストでは実発行試験をskipする。
@@ -37,7 +33,7 @@ docker compose -f compose.pki.yaml run --rm --workdir /tmp pki self-test
 ```
 
 通常のCA発行は引き続き/dataや/offlineへの書き込み権限が必要。
-ホスト側の所有UID/GIDと、コンテナのPKI_UID/PKI_GIDを確認する。
+ホスト側の所有UID/GIDと、コンテナのBIND_UID/BIND_GIDを確認する。
 rootやchmod 777で権限問題を回避しない。
 
 ```bash

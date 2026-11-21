@@ -10,12 +10,15 @@ STATUS=$SHARED/status-radius.json
 R=${RADDB:-/etc/freeradius/3.0}
 TEMPLATES=${TEMPLATE_DIR:-/templates}
 export LDAP_SERVER=${LDAP_SERVER:-nw-openldap}
+BIND_UID=${BIND_UID:-0}
+BIND_GID=${BIND_GID:-0}
 PID=""
 
 log() { echo "[freeradius] $*"; }
 now() { date '+%Y-%m-%dT%H:%M:%S%z'; }
 
 mkdir -p "$SHARED/freeradius" /tmp/nwlab-stage /tmp/nwlab-prev
+chown -R "$BIND_UID:$BIND_GID" "$SHARED"
 until [ -s "$SETTINGS" ]; do log "settings.json を待っています"; sleep 2; done
 
 default_policy() {
@@ -60,7 +63,9 @@ signature() {
 
 write_status() { # $1=signature $2=true/false $3=message
   jq -n --arg s "$1" --argjson ok "$2" --arg m "$3" --arg t "$(now)" \
-    '{applied_signature:$s, ok:$ok, message:$m, time:$t}' > "$STATUS.tmp" && mv "$STATUS.tmp" "$STATUS"
+    '{applied_signature:$s, ok:$ok, message:$m, time:$t}' > "$STATUS.tmp"
+  chown "$BIND_UID:$BIND_GID" "$STATUS.tmp"
+  mv "$STATUS.tmp" "$STATUS"
 }
 
 # 新しい設定を配置して -C で検証。失敗したら元に戻す
@@ -73,6 +78,7 @@ apply() {
   local src
   src=$(policy_source) || return 1
   if [ -s "$src" ]; then cp "$src" /tmp/nwlab-stage/nwlab_vlan; else default_policy > /tmp/nwlab-stage/nwlab_vlan; fi
+  [ ! -f "$src" ] || chown "$BIND_UID:$BIND_GID" "$src"
 
   rm -f /tmp/nwlab-prev/*
   [ -f "$R/mods-enabled/ldap" ] && cp -p "$R/mods-enabled/ldap" /tmp/nwlab-prev/ldap
@@ -115,6 +121,7 @@ stop() {
 trap 'stop; exit 0' TERM INT
 
 until ldap_ready; do sleep 2; done
+chown -R "$BIND_UID:$BIND_GID" "$SHARED"
 SIG=$(signature)
 if ! apply; then
   write_status "$SIG" false "FreeRADIUS の設定検証に失敗しました: $(grep -iE 'error|fail' /tmp/nwlab-check.log | tail -2 | tr '\n' ' ')"

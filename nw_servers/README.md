@@ -12,79 +12,33 @@ Raspberry Pi 4上のDocker ComposeでLDAP/RADIUS、MailpitとNetRigポータル�
 | log-view | Syslog/SNMP Trap収集、イベント表示 | 514/tcp+udp, 162/tcp+udp |
 | mailpit | SMTP受信（STARTTLS） | 25/tcp |
 | mailpit-smtps | SMTP暗黙TLS | 465/tcp |
+| ftp | 匿名FTP（読み取り専用） | 21/tcp, 21100-21110/tcp |
+| tftp | TFTP（読み取り専用） | 69/udp |
 
-## 初回準備
+## 初回セットアップと更新
 
-```sh
-cp .env.example .env
-```
+Rootless Dockerと通常のDocker daemonのどちらでも、セットアップスクリプトがモードを検出し、`.env`の`BIND_UID/GID`と全bind mount元の所有者を調整します。スクリプトはComposeを起動する前にディレクトリとファイルを作り、Dockerの暗黙のroot所有ディレクトリ作成を防ぎます。`sudo`は使わず、ローカルユーザーで実行してください。
 
-`.env` の `ChangeMe` と `replace-with` を強い値に変更し、`PI_IP` を実際のアドレスに設定します。`NETRIG_SECRET` は `openssl rand -hex 32` で生成します。NetRigのユーザー名は `netrig/config/settings.json`、共通パスワードは `.env` で設定します。
-
-Web UIは検証LAN向けにHTTPで動作します。認証情報を送信するため、信頼できるLAN内で利用してください。Mailpit SMTPはSTARTTLS/暗黙TLSを使います。初回起動前に自己署名証明書を用意します（CN、DNS名、IPは `.env` の実値に合わせてください）。
-
-```sh
-mkdir -p mailpit/secrets mailpit/data plugins/log_view/config/mibs plugins/log_view/data
-openssl req -x509 -newkey rsa:3072 -nodes \
-  -keyout mailpit/secrets/tls.key -out mailpit/secrets/tls.crt -days 825 \
-  -subj "/CN=nwlab.local" \
-  -addext "subjectAltName=DNS:nwlab.local,IP:192.0.2.10"
-chmod 600 mailpit/secrets/tls.key
-```
-
-## 起動
-
-```sh
-docker compose up -d --build
-docker compose ps
-docker compose logs -f netrig caddy ldapmgttooz log-view mailpit
-```
-
-ブラウザーで `http://<PiのIP>/` を開いてNetRigにサインインします。ポータルからLDAP管理またはログビューを選択します。SMTPクライアントはSTARTTLSで25、または暗黙TLSで465を指定します。
-
-## 新しいディレクトリ構成への初回切り替え
-
-旧LDAP MDBを引き継がない場合は、Composeを停止して新しい `openldap/data/` を空にしてから起動します。この操作でLDAPディレクトリ内の既存データは削除され、環境変数から初期設定を作り直します。
-
-```sh
-docker compose down
-sudo find ./openldap/data -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-sudo install -d -o "$(id -u)" -g "$(id -g)" plugins/log_view/data plugins/log_view/config/mibs
-sudo chown -R "$(id -u):$(id -g)" plugins/log_view/data plugins/log_view/config/mibs
-docker compose up -d --build
-```
-
-OpenLDAPの初期化完了後にLDAP管理画面を開きます。ログビューの起動ログにMIBディレクトリの権限エラーが出る場合は、`.env`の`LOG_VIEW_UID` / `LOG_VIEW_GID`と、上記ディレクトリの所有者が一致していることを確認してください。
-
-Docker rootlessでは、bind mount内の所有者はホスト側でsubuid/subgidに変換されます。ホストUIDが1001の場合、既定のマッピングではコンテナUID 1001がホストUID 166536（`1001 + 165535`）に対応します。ログビューのデータとMIBディレクトリはこの変換後UID/GIDに所有させ、`.env`の`LOG_VIEW_UID/GID`にはコンテナ内で使うホストUID/GID（通常は1001）を指定してください。`chmod 777`は不要です。`sqlite3.OperationalError: unable to open database file`が続く場合は、Composeのマウント先と実際の書き込みを確認してください。既存DBやMIBファイルを削除する必要はありません。
+Rootless Dockerでは80、21、25、69番のような1024未満のホストポート公開に、ホスト側の許可設定が必要です。Docker公式手順に従って`net.ipv4.ip_unprivileged_port_start=0`を設定してください。RootlessKitに`CAP_NET_BIND_SERVICE`を付与して対応する場合は、セットアップ時に`ROOTLESS_PRIVILEGED_PORTS=1`を環境変数として渡します。スクリプトはsysctl値を確認し、未設定ならポート公開が失敗する前に案内して停止します。
 
 ```sh
 cd ~/.local/docker/nw_servers
-id -u
-id -g
-# .env の LOG_VIEW_UID / LOG_VIEW_GID はコンテナ内UID/GIDとしてホスト値（1001）を維持
-# 既存の緩い権限を標準化し、rootlessのmapped ownerを割り当て
-sudo chmod -R u=rwX,go= plugins/log_view/data plugins/log_view/config/mibs
-sudo install -d -o 166536 -g 166536 plugins/log_view/data plugins/log_view/config/mibs
-sudo chown -R 166536:166536 plugins/log_view/data plugins/log_view/config/mibs
-docker compose up -d --force-recreate log-view
-docker compose logs --tail=50 log-view
+bash scripts/setup.sh
 ```
 
-`166536`はユーザーのsubuid範囲が`165536`から始まるrootless Dockerの例です。実際の対応値は`/etc/subuid`と`/etc/subgid`の各開始値に、コンテナUID/GID 1001から1を引いた値を加えて確認してください。
+初回は`.env.example`から`.env`を作ります。表示された案内に従い、例のパスワードを強い値に置き換え、`NETRIG_SECRET`を`openssl rand -hex 32`の出力にしてから、もう一度`bash scripts/setup.sh`を実行してください。`PI_IP`と`FTP_PASV_ADDRESS`はPiのLANアドレスに設定します。Mailpit TLS証明書とPKIの初期パスワードもセットアップ時に生成されます。
+
+更新時は次を実行します。スクリプトはFast-forward可能な場合にGitを更新し、bind mount所有者を整えてからサービスとPKI CLIイメージを再ビルドします。
 
 ```sh
-docker compose config
-docker inspect nw-log-view --format '{{json .Mounts}}'
-docker compose run --rm --no-deps --entrypoint sh log-view -c \
-  'id; ls -ldn /data /config/mibs; touch /data/.write-test && rm /data/.write-test; touch /config/mibs/.write-test && rm /config/mibs/.write-test'
+bash scripts/update.sh
 ```
 
-LDAP/RADIUSだけを更新する場合も同じComposeプロジェクトを使います。
+Web UIは検証LAN向けにHTTPで動作します。ログイン情報を送信するため、信頼できるLAN内で利用してください。ブラウザーで `http://<PiのIP>/` を開いてNetRigにサインインし、ポータルからLDAP管理またはログビューを選択します。MailpitのSMTPクライアントはSTARTTLSで25、または暗黙TLSで465を指定します。
 
-```sh
-docker compose up -d --build openldap freeradius ldapmgttooz
-```
+## FTP / TFTP
+
+両サービスは同じ`./public/`を公開します。FTPは匿名読み取り専用で21/tcpとパッシブポート21100-21110/tcp、TFTPは読み取り専用で69/udpを使います。アップロードは無効です。FTPは暗号化されないため、信頼できるLAN内でのみ利用してください。
 
 ## ディレクトリ規則
 
@@ -98,16 +52,16 @@ freeradius/{config,data}/
 ldapmgttooz/{app,config,data}/
 plugins/log_view/{app,config,data}/
 mailpit/{config,data,secrets}/
+ftp/{Dockerfile,vsftpd.conf,entrypoint.sh}
+tftp/{Dockerfile}
+public/
+scripts/{setup,update,prepare-bind-mounts}.sh
 shared/ldap/
 ```
 
 Composeファイルと各コンテナのDockerfileは、それぞれの実行環境に近い場所にあります。ログビューはイメージビルド時にDebianの`snmp-mibs-downloader`で標準MIBを取得し、初回起動時に不足分を `plugins/log_view/config/mibs/` へコピーします。手動MIBも同じ場所に保存されます。SQLite DBとコンパイル済みMIBは `plugins/log_view/data/` に保存されます。
 
-ログビューは `.env` の `LOG_VIEW_UID` / `LOG_VIEW_GID` で指定したホストユーザーとして動作します。Piで `id -u` と `id -g` を実行し、その値を `.env` に設定してください。既存ディレクトリの所有者も同じUID/GIDに揃えます。
-
-```sh
-sudo chown -R "$(id -u):$(id -g)" plugins/log_view/data plugins/log_view/config/mibs
-```
+FTP/TFTPの読み取り対象ファイルは`public/`へ配置します。公開したくないファイルは置かないでください。セットアップ・更新スクリプトは`public/`も含めbind mount元を実行ユーザー所有に整えます。
 
 ## バックアップ
 
@@ -116,6 +70,7 @@ sudo chown -R "$(id -u):$(id -g)" plugins/log_view/data plugins/log_view/config/
 - ログ: `plugins/log_view/data/` と `plugins/log_view/config/mibs/` を保存します。
 - Mailpit: `mailpit/data/` を保存します。
 - SMTP証明書: `mailpit/secrets/` を安全に保管します。秘密鍵はGitに含めないでください。
+- FTP/TFTP公開ファイル: `public/` をバックアップします。
 - NetRig認証: `.env` の `NETRIG_SECRET` と認証ユーザー情報を安全に保管します。
 
 整合したバックアップを取る場合は、対象サービスを停止してからコピーしてください。ログ保持期間は `.env` の `LOG_RETENTION_DAYS` で設定します。

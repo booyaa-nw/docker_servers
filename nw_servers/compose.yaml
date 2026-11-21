@@ -15,6 +15,8 @@ services:
       LDAP_RADIUS_PASSWORD: "${LDAP_RADIUS_PASSWORD:?Set LDAP_RADIUS_PASSWORD in .env}"
       LDAP_USER1_PASSWORD: "${LDAP_USER1_PASSWORD:?Set LDAP_USER1_PASSWORD in .env}"
       LDAP_USER2_PASSWORD: "${LDAP_USER2_PASSWORD:?Set LDAP_USER2_PASSWORD in .env}"
+      SLAPD_UID: "${BIND_UID:-0}"
+      SLAPD_GID: "${BIND_GID:-0}"
     volumes:
       - ./openldap/config/slapd.conf.tmpl:/templates/slapd.conf.tmpl:ro
       - ./openldap/config/bootstrap.ldif.tmpl:/templates/bootstrap.ldif.tmpl:ro
@@ -34,6 +36,8 @@ services:
       TZ: Asia/Tokyo
       RADIUS_SECRET: "${RADIUS_SECRET:?Set RADIUS_SECRET in .env}"
       RADIUS_DEBUG: "${RADIUS_DEBUG:-0}"     # 1 にすると freeradius -X
+      BIND_UID: "${BIND_UID:-0}"
+      BIND_GID: "${BIND_GID:-0}"
     volumes:
       - ./freeradius/config/clients.conf:/etc/freeradius/3.0/clients.conf:ro
       - ./freeradius/config/ldap.tmpl:/templates/ldap.tmpl:ro
@@ -47,6 +51,7 @@ services:
     image: nwlab/ldapmgttooz:local
     container_name: nw-ldapmgttooz
     restart: unless-stopped
+    user: "${BIND_UID:-0}:${BIND_GID:-0}"
     expose:
       - "8080"
     environment:
@@ -66,6 +71,7 @@ services:
     build: ./mailpit-certs
     image: nwlab/mailpit-certs:local
     container_name: nw-mailpit-certs
+    user: "${BIND_UID:-0}:${BIND_GID:-0}"
     environment:
       TLS_CERT_CN: "${PUBLIC_DOMAIN:-nwlab.local}"
       TLS_CERT_SAN: "DNS:${PUBLIC_DOMAIN:-nwlab.local},IP:${PI_IP:-127.0.0.1}"
@@ -77,6 +83,7 @@ services:
     image: ghcr.io/axllent/mailpit:v1.33.1
     container_name: nw-mailpit
     restart: unless-stopped
+    user: "${BIND_UID:-0}:${BIND_GID:-0}"
     ports:
       - "25:1025/tcp"
     expose:
@@ -125,7 +132,7 @@ services:
     image: nwlab/netrig-log-view:local
     container_name: nw-log-view
     restart: unless-stopped
-    user: "${LOG_VIEW_UID:-1000}:${LOG_VIEW_GID:-1000}"
+    user: "${BIND_UID:-0}:${BIND_GID:-0}"
     expose:
       - "8080"
     ports:
@@ -146,8 +153,8 @@ services:
       MAILPIT_POLL_SECONDS: "${MAILPIT_POLL_SECONDS:-2}"
       LOG_RETENTION_DAYS: "${LOG_RETENTION_DAYS:-30}"
     volumes:
-      - ${LOG_VIEW_DATA_PATH:-./plugins/log_view/data}:/data
-      - ${LOG_VIEW_MIB_PATH:-./plugins/log_view/config/mibs}:/config/mibs
+      - ./plugins/log_view/data:/data
+      - ./plugins/log_view/config/mibs:/config/mibs
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -158,11 +165,35 @@ services:
       mailpit:
         condition: service_healthy
 
+  ftp:
+    build: ./ftp
+    image: nwlab/ftp:local
+    container_name: nw-ftp
+    restart: unless-stopped
+    environment:
+      FTP_PASV_ADDRESS: "${FTP_PASV_ADDRESS:-${PI_IP:-127.0.0.1}}"
+    ports:
+      - "21:2121/tcp"
+      - "21100-21110:21100-21110/tcp"
+    volumes:
+      - ./public:/srv/public:ro
+
+  tftp:
+    build: ./tftp
+    image: nwlab/tftp:local
+    container_name: nw-tftp
+    restart: unless-stopped
+    ports:
+      - "69:69/udp"
+    volumes:
+      - ./public:/srv/public:ro
+
   netrig:
     build: ./netrig
     image: nwlab/netrig:local
     container_name: nw-netrig
     restart: unless-stopped
+    user: "${BIND_UID:-0}:${BIND_GID:-0}"
     expose:
       - "8080"
     environment:
@@ -178,7 +209,8 @@ services:
     container_name: nw-caddy
     restart: unless-stopped
     ports:
-      - "80:80/tcp"
+      - "80:8080/tcp"
+    user: "${BIND_UID:-0}:${BIND_GID:-0}"
     volumes:
       - ./caddy/config/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./caddy/data:/data

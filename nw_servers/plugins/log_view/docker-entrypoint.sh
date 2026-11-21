@@ -22,7 +22,7 @@ fi
 # permission error does not cause an opaque restart loop.
 DATA_DIR=${LOG_VIEW_DATA_DIR:-/data}
 if [ ! -d "$DATA_DIR" ] || [ ! -w "$DATA_DIR" ]; then
-  echo "log-view: data directory '$DATA_DIR' is not writable by UID $(id -u). Check the host bind mount and LOG_VIEW_UID/LOG_VIEW_GID." >&2
+  echo "log-view: data directory '$DATA_DIR' is not writable by UID $(id -u). Run scripts/prepare-bind-mounts.sh and verify BIND_UID/BIND_GID." >&2
 fi
 
 exec "$@"

@@ -3,7 +3,7 @@ x-pki: &pki
   build: ./pki
   image: nw-cfssl-cli:1.7.0
   working_dir: /data
-  user: "${PKI_UID:-1000}:${PKI_GID:-1000}"
+  user: "${BIND_UID:-0}:${BIND_GID:-0}"
   network_mode: none
   read_only: true
   cap_drop: [ALL]
