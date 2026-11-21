@@ -14,6 +14,7 @@ export SCHEMA_DIR=${SCHEMA_DIR:-/etc/openldap/schema}
 export MODULE_DIR=${MODULE_DIR:-/usr/lib/openldap}
 export RUN_DIR=${RUN_DIR:-/run/openldap}
 DATA_ROOT=${DATA_DIR:-/var/lib/openldap/openldap-data}
+DATA_PARENT=$(dirname "$DATA_ROOT")
 SLAPD_UID=${SLAPD_UID:-0}
 SLAPD_GID=${SLAPD_GID:-0}
 SLAPD_URLS=${SLAPD_URLS:-ldap:///}
@@ -55,7 +56,7 @@ fi
 
 umask 077
 mkdir -p "$RUN_DIR" "$DATA_ROOT"
-chown "$SLAPD_UID:$SLAPD_GID" "$RUN_DIR" "$DATA_ROOT"
+chown "$SLAPD_UID:$SLAPD_GID" "$RUN_DIR" "$DATA_PARENT" "$DATA_ROOT"
 chown -R "$SLAPD_UID:$SLAPD_GID" "$SHARED"
 
 set_bind_owner() {
