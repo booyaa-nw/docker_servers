@@ -25,6 +25,34 @@ log() { echo "[openldap] $*"; }
 now() { date '+%Y-%m-%dT%H:%M:%S%z'; }
 get() { jq -r "$1" "$SETTINGS"; }
 
+# slapd's -u/-g options resolve names through /etc/passwd and /etc/group.
+# Keep numeric IDs for bind-mount ownership, but ensure those IDs have names
+# inside the container before starting slapd.
+case "$SLAPD_UID:$SLAPD_GID" in
+  *[!0-9:]*|:*|*:) log "SLAPD_UID/SLAPD_GID must be numeric"; exit 1 ;;
+esac
+SLAPD_USER=$(awk -F: -v id="$SLAPD_UID" '$3 == id { print $1; exit }' /etc/passwd)
+if [ -z "$SLAPD_USER" ]; then
+  SLAPD_USER="nwlabbind${SLAPD_UID}"
+  suffix=0
+  while awk -F: -v name="$SLAPD_USER" '$1 == name { found=1 } END { exit !found }' /etc/passwd; do
+    suffix=$((suffix + 1))
+    SLAPD_USER="nwlabbind${SLAPD_UID}_${suffix}"
+  done
+  printf '%s:x:%s:%s:OpenLDAP bind user:/nonexistent:/sbin/nologin\n' \
+    "$SLAPD_USER" "$SLAPD_UID" "$SLAPD_GID" >> /etc/passwd
+fi
+SLAPD_GROUP=$(awk -F: -v id="$SLAPD_GID" '$3 == id { print $1; exit }' /etc/group)
+if [ -z "$SLAPD_GROUP" ]; then
+  SLAPD_GROUP="nwlabbind${SLAPD_GID}"
+  suffix=0
+  while awk -F: -v name="$SLAPD_GROUP" '$1 == name { found=1 } END { exit !found }' /etc/group; do
+    suffix=$((suffix + 1))
+    SLAPD_GROUP="nwlabbind${SLAPD_GID}_${suffix}"
+  done
+  printf '%s:x:%s:\n' "$SLAPD_GROUP" "$SLAPD_GID" >> /etc/group
+fi
+
 umask 077
 mkdir -p "$RUN_DIR" "$DATA_ROOT"
 chown "$SLAPD_UID:$SLAPD_GID" "$RUN_DIR" "$DATA_ROOT"
@@ -83,7 +111,7 @@ wait_ready() {
 }
 
 start_slapd() { # $1=URL
-  slapd -d "${LDAP_LOG_LEVEL:-256}" -h "$1" -f "$CONF" -u "$SLAPD_UID" -g "$SLAPD_GID" &
+  slapd -d "${LDAP_LOG_LEVEL:-256}" -h "$1" -f "$CONF" -u "$SLAPD_USER" -g "$SLAPD_GROUP" &
   PID=$!
 }
 

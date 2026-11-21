@@ -26,7 +26,7 @@ cd ~/.local/docker/nw_servers
 bash scripts/setup.sh
 ```
 
-初回は`.env.example`から`.env`を作ります。表示された案内に従い、例のパスワードを強い値に置き換え、`NETRIG_SECRET`を`openssl rand -hex 32`の出力にしてから、もう一度`bash scripts/setup.sh`を実行してください。`PI_IP`と`FTP_PASV_ADDRESS`はPiのLANアドレスに設定します。Mailpit TLS証明書とPKIの初期パスワードもセットアップ時に生成されます。
+初回は`.env.example`から`.env`を作ります。表示された案内に従い、例のパスワードを強い値に置き換え、`NETRIG_SECRET`を`openssl rand -hex 32`の出力にしてから、もう一度`bash scripts/setup.sh`を実行してください。`PI_IP`はPiのLANアドレスに設定します。`FTP_PASV_ADDRESS`は空欄なら`PI_IP`を使います。別のネットワークから接続させる場合だけ、FTPクライアントに通知する外部アドレスを設定してください。Mailpit TLS証明書とPKIの初期パスワードもセットアップ時に生成されます。
 
 更新時は次を実行します。スクリプトはFast-forward可能な場合にGitを更新し、bind mount所有者を整えてからサービスとPKI CLIイメージを再ビルドします。
 
