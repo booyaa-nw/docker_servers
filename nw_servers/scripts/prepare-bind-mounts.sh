@@ -103,8 +103,9 @@ done
 docker run --rm --user 0:0 "${mounts[@]}" alpine:3.22 \
   chown -R "$owner_uid:$owner_gid" "${targets[@]}" >/dev/null
 
-# The public share contains intentionally downloadable files.
-chmod -R a+rX public
+# The public share is intentionally writable by the FTP/TFTP service group.
+chmod -R u+rwX,g+rwX,o+rX public
+find public -type d -exec chmod 2775 {} +
 
 for path in "${directories[@]}" "${files[@]}"; do
   actual=$(stat -c '%u:%g' -- "$path")

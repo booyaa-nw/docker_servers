@@ -13,7 +13,7 @@ Raspberry Pi 4上のDocker ComposeでLDAP/RADIUS、MailpitとNetRigポータル�
 | mailpit | SMTP受信（STARTTLS） | 25/tcp |
 | mailpit-smtps | SMTP暗黙TLS | 465/tcp |
 | ftp | ユーザー認証FTP（読み取り専用） | 21/tcp, 21100-21110/tcp |
-| tftp | TFTP（読み取り専用） | 69/udp |
+| tftp | TFTP（PUT対応） | 69/udp |
 
 ## 初回セットアップと更新
 
@@ -38,7 +38,7 @@ Web UIは検証LAN向けにHTTPで動作します。ログイン情報を送信�
 
 ## FTP / TFTP
 
-両サービスは同じ`./public/`を公開します。FTPはユーザー名・パスワード認証の読み取り専用で21/tcpとパッシブポート21100-21110/tcp、TFTPは読み取り専用で69/udpを使います。アップロードは無効です。FTPの認証情報と通信内容は暗号化されないため、信頼できるLAN内でのみ利用してください。
+両サービスは同じ`./public/`を読み書きします。FTPはユーザー名・パスワード認証で21/tcpとパッシブポート21100-21110/tcp、TFTPは認証なしで69/udpを使い、どちらもPUTでアップロードできます。アップロードされたファイルはセットアップスクリプトとFTP側の監視処理がホストのローカルユーザー所有に揃えます。TFTPは認証なしで書き込めるため信頼できるLANに限定し、FTPの認証情報と通信内容も暗号化されないため信頼できるLAN内で利用してください。
 
 ## ディレクトリ規則
 
@@ -53,7 +53,7 @@ ldapmgttooz/{app,config,data}/
 plugins/log_view/{app,config,data}/
 mailpit/{config,data,secrets}/
 ftp/{Dockerfile,vsftpd.conf,pam-vsftpd,entrypoint.sh}
-tftp/{Dockerfile}
+tftp/{Dockerfile,entrypoint.sh}
 public/
 scripts/{setup,update,prepare-bind-mounts}.sh
 shared/ldap/
@@ -61,7 +61,7 @@ shared/ldap/
 
 Composeファイルと各コンテナのDockerfileは、それぞれの実行環境に近い場所にあります。ログビューはイメージビルド時にDebianの`snmp-mibs-downloader`で標準MIBを取得し、初回起動時に不足分を `plugins/log_view/config/mibs/` へコピーします。手動MIBも同じ場所に保存されます。SQLite DBとコンパイル済みMIBは `plugins/log_view/data/` に保存されます。
 
-FTP/TFTPの読み取り対象ファイルは`public/`へ配置します。公開したくないファイルは置かないでください。セットアップ・更新スクリプトは`public/`も含めbind mount元を実行ユーザー所有に整えます。
+FTP/TFTPで共有するファイルは`public/`へ配置します。公開・書き込みさせたくないファイルは置かないでください。セットアップ・更新スクリプトは`public/`も含めbind mount元を実行ユーザー所有に整えます。
 
 ## バックアップ
 
