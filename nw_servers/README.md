@@ -12,7 +12,7 @@ Raspberry Pi 4上のDocker ComposeでLDAP/RADIUS、MailpitとNetRigポータル�
 | log-view | Syslog/SNMP Trap収集、イベント表示 | 514/tcp+udp, 162/tcp+udp |
 | mailpit | SMTP受信（STARTTLS） | 25/tcp |
 | mailpit-smtps | SMTP暗黙TLS | 465/tcp |
-| ftp | 匿名FTP（読み取り専用） | 21/tcp, 21100-21110/tcp |
+| ftp | ユーザー認証FTP（読み取り専用） | 21/tcp, 21100-21110/tcp |
 | tftp | TFTP（読み取り専用） | 69/udp |
 
 ## 初回セットアップと更新
@@ -26,7 +26,7 @@ cd ~/.local/docker/nw_servers
 bash scripts/setup.sh
 ```
 
-初回は`.env.example`から`.env`を作ります。表示された案内に従い、例のパスワードを強い値に置き換え、`NETRIG_SECRET`を`openssl rand -hex 32`の出力にしてから、もう一度`bash scripts/setup.sh`を実行してください。`PI_IP`はPiのLANアドレスに設定します。`FTP_PASV_ADDRESS`は空欄なら`PI_IP`を使います。別のネットワークから接続させる場合だけ、FTPクライアントに通知する外部アドレスを設定してください。Mailpit TLS証明書とPKIの初期パスワードもセットアップ時に生成されます。
+初回は`.env.example`から`.env`を作ります。表示された案内に従い、例のパスワードを強い値に置き換え、`NETRIG_SECRET`を`openssl rand -hex 32`の出力にして、`FTP_PASSWORD`にも`openssl rand -hex 24`などで生成したパスワードを設定してから、もう一度`bash scripts/setup.sh`を実行してください。`PI_IP`はPiのLANアドレスに設定します。`FTP_PASV_ADDRESS`は空欄なら`PI_IP`を使います。別のネットワークから接続させる場合だけ、FTPクライアントに通知する外部アドレスを設定してください。FTPログインには`.env`の`FTP_USERNAME`と`FTP_PASSWORD`を使います。Mailpit TLS証明書とPKIの初期パスワードもセットアップ時に生成されます。
 
 更新時は次を実行します。スクリプトはFast-forward可能な場合にGitを更新し、bind mount所有者を整えてからサービスとPKI CLIイメージを再ビルドします。
 
@@ -38,7 +38,7 @@ Web UIは検証LAN向けにHTTPで動作します。ログイン情報を送信�
 
 ## FTP / TFTP
 
-両サービスは同じ`./public/`を公開します。FTPは匿名読み取り専用で21/tcpとパッシブポート21100-21110/tcp、TFTPは読み取り専用で69/udpを使います。アップロードは無効です。FTPは暗号化されないため、信頼できるLAN内でのみ利用してください。
+両サービスは同じ`./public/`を公開します。FTPはユーザー名・パスワード認証の読み取り専用で21/tcpとパッシブポート21100-21110/tcp、TFTPは読み取り専用で69/udpを使います。アップロードは無効です。FTPの認証情報と通信内容は暗号化されないため、信頼できるLAN内でのみ利用してください。
 
 ## ディレクトリ規則
 
@@ -52,7 +52,7 @@ freeradius/{config,data}/
 ldapmgttooz/{app,config,data}/
 plugins/log_view/{app,config,data}/
 mailpit/{config,data,secrets}/
-ftp/{Dockerfile,vsftpd.conf,entrypoint.sh}
+ftp/{Dockerfile,vsftpd.conf,pam-vsftpd,entrypoint.sh}
 tftp/{Dockerfile}
 public/
 scripts/{setup,update,prepare-bind-mounts}.sh

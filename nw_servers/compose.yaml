@@ -172,6 +172,8 @@ services:
     restart: unless-stopped
     environment:
       FTP_PASV_ADDRESS: "${FTP_PASV_ADDRESS:-${PI_IP:-127.0.0.1}}"
+      FTP_USERNAME: "${FTP_USERNAME:-ftpuser}"
+      FTP_PASSWORD: "${FTP_PASSWORD:-}"
     ports:
       - "21:2121/tcp"
       - "21100-21110:21100-21110/tcp"

@@ -13,6 +13,10 @@ with the output of `openssl rand -hex 32`, then run scripts/setup.sh again.
 EOF
   exit 1
 fi
+if ! grep -q '^FTP_PASSWORD=.' .env; then
+  echo "Set a non-empty FTP_PASSWORD in .env before starting FTP." >&2
+  exit 1
+fi
 
 docker compose config --quiet
 docker compose up -d --build --remove-orphans

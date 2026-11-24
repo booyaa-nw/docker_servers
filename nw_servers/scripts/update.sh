@@ -13,6 +13,10 @@ if grep -Eq 'ChangeMe|replace-with' .env; then
   echo "Set the sample values in .env before updating the stack." >&2
   exit 1
 fi
+if ! grep -q '^FTP_PASSWORD=.' .env; then
+  echo "Set a non-empty FTP_PASSWORD in .env before starting FTP." >&2
+  exit 1
+fi
 docker compose config --quiet
 docker compose up -d --build --remove-orphans
 docker compose -f compose.pki.yaml build pki

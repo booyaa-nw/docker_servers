@@ -58,6 +58,8 @@ set_env() {
 }
 set_env BIND_UID "$bind_uid"
 set_env BIND_GID "$bind_gid"
+if ! grep -q '^FTP_USERNAME=' .env; then set_env FTP_USERNAME ftpuser; fi
+if ! grep -q '^FTP_PASSWORD=' .env; then set_env FTP_PASSWORD ''; fi
 chmod 600 .env
 
 directories=(
