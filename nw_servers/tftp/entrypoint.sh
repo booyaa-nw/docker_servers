@@ -32,4 +32,4 @@ inotifywait -m -r -e close_write,moved_to,create --format '%w%f' /srv/public 2>/
     fi
   done &
 
-exec /usr/sbin/in.tftpd --foreground --listen --user netrigftp --secure --create --umask 0002 /srv/public
+exec /usr/sbin/in.tftpd --foreground --listen --user netrigftp --secure --create --permissive --umask 0002 /srv/public
