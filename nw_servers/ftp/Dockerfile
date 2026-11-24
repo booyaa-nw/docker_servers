@@ -7,5 +7,5 @@ COPY entrypoint.sh /usr/local/bin/netrig-ftp-entrypoint
 RUN chmod 755 /usr/local/bin/netrig-ftp-entrypoint \
     && mkdir -p /etc/pam.d /var/run/vsftpd/empty /srv/public
 
-EXPOSE 2121/tcp 21100-21110/tcp
+EXPOSE 21/tcp 21100-21110/tcp
 ENTRYPOINT ["/usr/local/bin/netrig-ftp-entrypoint"]

@@ -1,14 +1,10 @@
 #!/bin/sh
 set -eu
 
-address=${FTP_PASV_ADDRESS:-127.0.0.1}
 username=${FTP_USERNAME:-ftpuser}
 password=${FTP_PASSWORD:-}
 bind_uid=${BIND_UID:-0}
 bind_gid=${BIND_GID:-0}
-case "$address" in
-  *[!A-Za-z0-9.-]*|'') echo "FTP_PASV_ADDRESS must be an IPv4 address or hostname" >&2; exit 2 ;;
-esac
 case "$username" in
   ''|*[!A-Za-z0-9_.-]*) echo "FTP_USERNAME may contain only letters, numbers, dots, underscores, and hyphens" >&2; exit 2 ;;
 esac
@@ -48,5 +44,11 @@ inotifywait -m -r -e close_write,moved_to,create --format '%w%f' /srv/public 2>/
     fi
   done &
 
-sed "s/@FTP_PASV_ADDRESS@/$address/g" /etc/vsftpd/vsftpd.conf.template > /tmp/vsftpd.conf
+cp /etc/vsftpd/vsftpd.conf.template /tmp/vsftpd.conf
+if [ -n "${FTP_PASV_ADDRESS:-}" ]; then
+  case "$FTP_PASV_ADDRESS" in
+    *[!A-Za-z0-9.-]*) echo "FTP_PASV_ADDRESS must be an IPv4 address or hostname" >&2; exit 2 ;;
+  esac
+  printf '\npasv_addr_resolve=YES\npasv_address=%s\n' "$FTP_PASV_ADDRESS" >> /tmp/vsftpd.conf
+fi
 exec /usr/sbin/vsftpd /tmp/vsftpd.conf

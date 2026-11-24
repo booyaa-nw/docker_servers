@@ -9,6 +9,11 @@ security_options=$(docker info --format '{{json .SecurityOptions}}')
 host_uid=$(id -u)
 host_gid=$(id -g)
 if [[ "$security_options" == *rootless* ]]; then
+  daemon_version=$(docker version --format '{{.Server.Version}}')
+  if ! awk -v version="${daemon_version%%-*}" 'BEGIN { split(version, v, "."); exit !((v[1]+0 > 29) || (v[1]+0 == 29 && v[2]+0 >= 5)) }'; then
+    echo "Rootless Docker needs Engine 29.5 or later for FTP to detect the host interface address. Current engine: $daemon_version" >&2
+    exit 1
+  fi
   bind_uid=0
   bind_gid=0
   owner_uid=0

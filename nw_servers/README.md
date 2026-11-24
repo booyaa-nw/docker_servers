@@ -19,14 +19,14 @@ Raspberry Pi 4上のDocker ComposeでLDAP/RADIUS、MailpitとNetRigポータル�
 
 Rootless Dockerと通常のDocker daemonのどちらでも、セットアップスクリプトがモードを検出し、`.env`の`BIND_UID/GID`と全bind mount元の所有者を調整します。スクリプトはComposeを起動する前にディレクトリとファイルを作り、Dockerの暗黙のroot所有ディレクトリ作成を防ぎます。`sudo`は使わず、ローカルユーザーで実行してください。
 
-Rootless Dockerでは80、21、25、69番のような1024未満のホストポート公開に、ホスト側の許可設定が必要です。Docker公式手順に従って`net.ipv4.ip_unprivileged_port_start=0`を設定してください。RootlessKitに`CAP_NET_BIND_SERVICE`を付与して対応する場合は、セットアップ時に`ROOTLESS_PRIVILEGED_PORTS=1`を環境変数として渡します。スクリプトはsysctl値を確認し、未設定ならポート公開が失敗する前に案内して停止します。
+Rootless Dockerでは80、21、25、69番のような1024未満のポートを使うため、ホスト側の許可設定が必要です。Docker公式手順に従って`net.ipv4.ip_unprivileged_port_start=0`を設定してください。RootlessKitに`CAP_NET_BIND_SERVICE`を付与して対応する場合は、セットアップ時に`ROOTLESS_PRIVILEGED_PORTS=1`を環境変数として渡します。FTPはホストネットワークを使うため、Rootless DockerではEngine 29.5以降が必要です。セットアップスクリプトが版とポート許可を確認します。
 
 ```sh
 cd ~/.local/docker/nw_servers
 bash scripts/setup.sh
 ```
 
-初回は`.env.example`から`.env`を作ります。表示された案内に従い、例のパスワードを強い値に置き換え、`NETRIG_SECRET`を`openssl rand -hex 32`の出力にして、`FTP_PASSWORD`にも`openssl rand -hex 24`などで生成したパスワードを設定してから、もう一度`bash scripts/setup.sh`を実行してください。`PI_IP`はPiのLANアドレスに設定します。`FTP_PASV_ADDRESS`は空欄なら`PI_IP`を使います。別のネットワークから接続させる場合だけ、FTPクライアントに通知する外部アドレスを設定してください。FTPログインには`.env`の`FTP_USERNAME`と`FTP_PASSWORD`を使います。Mailpit TLS証明書とPKIの初期パスワードもセットアップ時に生成されます。
+初回は`.env.example`から`.env`を作ります。表示された案内に従い、例のパスワードを強い値に置き換え、`NETRIG_SECRET`を`openssl rand -hex 32`の出力にして、`FTP_PASSWORD`にも`openssl rand -hex 24`などで生成したパスワードを設定してから、もう一度`bash scripts/setup.sh`を実行してください。`PI_IP`はMailpit証明書に含めるPiのLANアドレスです。FTPはホストネットワークで動き、PASV応答には接続を受け付けたNICのIPを使います。NAT配下など外部IPを通知する場合だけ`FTP_PASV_ADDRESS`を設定します。FTPログインには`.env`の`FTP_USERNAME`と`FTP_PASSWORD`を使います。Mailpit TLS証明書とPKIの初期パスワードもセットアップ時に生成されます。
 
 更新時は次を実行します。スクリプトはFast-forward可能な場合にGitを更新し、bind mount所有者を整えてからサービスとPKI CLIイメージを再ビルドします。
 

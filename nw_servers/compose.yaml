@@ -170,15 +170,13 @@ services:
     image: nwlab/ftp:local
     container_name: nw-ftp
     restart: unless-stopped
+    network_mode: host
     environment:
-      FTP_PASV_ADDRESS: "${FTP_PASV_ADDRESS:-${PI_IP:-127.0.0.1}}"
+      FTP_PASV_ADDRESS: "${FTP_PASV_ADDRESS:-}"
       FTP_USERNAME: "${FTP_USERNAME:-ftpuser}"
       FTP_PASSWORD: "${FTP_PASSWORD:-}"
       BIND_UID: "${BIND_UID:-0}"
       BIND_GID: "${BIND_GID:-0}"
-    ports:
-      - "21:2121/tcp"
-      - "21100-21110:21100-21110/tcp"
     volumes:
       - ./public:/srv/public:rw
 
